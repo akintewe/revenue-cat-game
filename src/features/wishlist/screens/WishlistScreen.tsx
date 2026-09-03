@@ -7,6 +7,7 @@ import { EmptyState } from '../../../shared/components/EmptyState';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import { useResponsiveLayout } from '../../../shared/hooks/useResponsiveLayout';
 import { findCatalogGame } from '../../../data/catalog';
+import { formatReleaseLabel } from '../../../shared/utils/formatDate';
 import { useWishlistStore } from '../store/useWishlistStore';
 import type { TabScreenProps } from '../../../core/navigation/types';
 
@@ -53,7 +54,7 @@ export function WishlistScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <GameRow
               title={item.game.title}
-              subtitle={`${item.game.platform} · ${item.game.year}`}
+              subtitle={`${item.game.platform} · ${formatReleaseLabel(item.game.releaseDate)}`}
               abbreviation={item.game.abbreviation}
               colorKey={item.game.colorKey}
               onPress={() =>

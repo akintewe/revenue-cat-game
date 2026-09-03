@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../../shared/components/Screen';
 import { Button } from '../../../shared/components/Button';
 import { GameCover } from '../../../shared/components/GameCover';
 import { SegmentedTabs } from '../../../shared/components/SegmentedTabs';
 import { RatingScale } from '../../../shared/components/RatingScale';
+import { LabeledInput } from '../../../shared/components/LabeledInput';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import { findCatalogGame } from '../../../data/catalog';
 import { useLibraryStore } from '../store/useLibraryStore';
@@ -24,9 +25,13 @@ export function GameDetailScreen({ route }: Props) {
   const addToLibrary = useLibraryStore((state) => state.addGame);
   const setStatus = useLibraryStore((state) => state.setStatus);
   const setRating = useLibraryStore((state) => state.setRating);
+  const setNotes = useLibraryStore((state) => state.setNotes);
+  const setHoursPlayed = useLibraryStore((state) => state.setHoursPlayed);
 
   const isWishlisted = useWishlistStore((state) => state.isWishlisted(catalogId));
   const addToWishlist = useWishlistStore((state) => state.addGame);
+
+  const [hoursDraft, setHoursDraft] = useState(entry?.hoursPlayed?.toString() ?? '');
 
   if (!game) {
     return (
@@ -45,6 +50,11 @@ export function GameDetailScreen({ route }: Props) {
 
   function handleShare() {
     Alert.alert('Share', `Share sheet for ${game!.title} goes here.`);
+  }
+
+  function commitHours() {
+    const parsed = Number(hoursDraft);
+    setHoursPlayed(catalogId, hoursDraft.trim() === '' || Number.isNaN(parsed) ? null : parsed);
   }
 
   return (
@@ -75,6 +85,41 @@ export function GameDetailScreen({ route }: Props) {
               <Text style={styles.sectionLabel}>Your rating · out of 10</Text>
               <RatingScale value={entry.rating} onChange={(rating) => setRating(catalogId, rating)} />
             </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Time to beat · your hours</Text>
+              <LabeledInput
+                value={hoursDraft}
+                onChangeText={setHoursDraft}
+                onBlur={commitHours}
+                placeholder="e.g. 42"
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Notes</Text>
+              <LabeledInput
+                value={entry.notes}
+                onChangeText={(text) => setNotes(catalogId, text)}
+                placeholder="Private notes and review — only you see this."
+                multiline
+              />
+            </View>
+
+            {game.pcRequirements && (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>PC requirements</Text>
+                <View style={styles.requirementRow}>
+                  <Text style={styles.requirementLabel}>Minimum</Text>
+                  <Text style={typography.body}>{game.pcRequirements.minimum}</Text>
+                </View>
+                <View style={styles.requirementRow}>
+                  <Text style={styles.requirementLabel}>Recommended</Text>
+                  <Text style={typography.body}>{game.pcRequirements.recommended}</Text>
+                </View>
+              </View>
+            )}
 
             <Button
               label={entry.status === 'beaten' ? 'Beaten' : 'Mark beaten'}
@@ -129,5 +174,13 @@ const styles = StyleSheet.create({
   },
   spacerTop: {
     marginTop: spacing.sm,
+  },
+  requirementRow: {
+    gap: 2,
+  },
+  requirementLabel: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   GameDetail: { catalogId: string };
   Paywall: undefined;
+  Passport: undefined;
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<

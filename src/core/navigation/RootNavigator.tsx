@@ -6,6 +6,7 @@ import { Pressable } from 'react-native';
 import { TabNavigator } from './TabNavigator';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
+import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
 
@@ -51,6 +52,18 @@ export function RootNavigator() {
           name="Paywall"
           component={PaywallScreen}
           options={{ presentation: 'modal', headerShown: false }}
+        />
+        <Stack.Screen
+          name="Passport"
+          component={PassportScreen}
+          options={({ navigation }) => ({
+            title: '',
+            headerLeft: () => (
+              <Pressable onPress={navigation.goBack} hitSlop={12}>
+                <Ionicons name="chevron-back" size={24} color={colors.text} />
+              </Pressable>
+            ),
+          })}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -7,8 +7,11 @@ import { EmptyState } from '../../../shared/components/EmptyState';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { searchCatalog } from '../../../data/catalog';
 import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
+import type { TabScreenProps } from '../../../core/navigation/types';
 
-export function AddGameScreen() {
+type Props = TabScreenProps<'AddTab'>;
+
+export function AddGameScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const entries = useLibraryStore((state) => state.entries);
   const isInLibrary = useLibraryStore((state) => state.isInLibrary);
@@ -63,7 +66,10 @@ export function AddGameScreen() {
           renderItem={({ item }) => {
             const added = isInLibrary(item.id);
             return (
-              <View style={styles.row}>
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate('GameDetail', { catalogId: item.id })}
+              >
                 <GameCover abbreviation={item.abbreviation} colorKey={item.colorKey} size={44} />
                 <View style={styles.info}>
                   <Text style={typography.subheading} numberOfLines={1}>
@@ -84,7 +90,7 @@ export function AddGameScreen() {
                     color={added ? colors.success : colors.text}
                   />
                 </Pressable>
-              </View>
+              </Pressable>
             );
           }}
         />

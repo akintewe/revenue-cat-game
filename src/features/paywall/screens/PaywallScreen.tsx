@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
@@ -76,7 +77,7 @@ export function PaywallScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Pressable onPress={() => navigation.goBack()} style={styles.closeButton} hitSlop={12}>
         <Ionicons name="close" size={22} color={colors.textMuted} />
       </Pressable>
@@ -159,7 +160,7 @@ export function PaywallScreen({ navigation }: Props) {
           </Pressable>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

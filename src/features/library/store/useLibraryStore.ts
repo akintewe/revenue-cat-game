@@ -13,6 +13,8 @@ type LibraryStore = {
   removeGame: (catalogId: string) => void;
   setStatus: (catalogId: string, status: GameStatus) => void;
   setRating: (catalogId: string, rating: number) => void;
+  setNotes: (catalogId: string, notes: string) => void;
+  setHoursPlayed: (catalogId: string, hours: number | null) => void;
 };
 
 export const useLibraryStore = create<LibraryStore>()(
@@ -32,6 +34,8 @@ export const useLibraryStore = create<LibraryStore>()(
             status: 'backlog',
             rating: null,
             addedAt: Date.now(),
+            notes: '',
+            hoursPlayed: null,
           };
           return { entries: [entry, ...state.entries] };
         }),
@@ -54,11 +58,39 @@ export const useLibraryStore = create<LibraryStore>()(
             entry.catalogId === catalogId ? { ...entry, rating } : entry,
           ),
         })),
+
+      setNotes: (catalogId, notes) =>
+        set((state) => ({
+          entries: state.entries.map((entry) =>
+            entry.catalogId === catalogId ? { ...entry, notes } : entry,
+          ),
+        })),
+
+      setHoursPlayed: (catalogId, hoursPlayed) =>
+        set((state) => ({
+          entries: state.entries.map((entry) =>
+            entry.catalogId === catalogId ? { ...entry, hoursPlayed } : entry,
+          ),
+        })),
     }),
     {
       name: 'library-store',
+      version: 1,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ entries: state.entries }),
+      migrate: (persistedState) => {
+        const state = persistedState as { entries?: Partial<LibraryEntry>[] };
+        return {
+          entries: (state.entries ?? []).map((entry) => ({
+            catalogId: entry.catalogId ?? '',
+            status: entry.status ?? 'backlog',
+            rating: entry.rating ?? null,
+            addedAt: entry.addedAt ?? Date.now(),
+            notes: entry.notes ?? '',
+            hoursPlayed: entry.hoursPlayed ?? null,
+          })),
+        };
+      },
     },
   ),
 );

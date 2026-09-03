@@ -5,6 +5,8 @@ export type LibraryEntry = {
   status: GameStatus;
   rating: number | null;
   addedAt: number;
+  notes: string;
+  hoursPlayed: number | null;
 };
 
 export type { GameStatus } from '../../../shared/types/status';

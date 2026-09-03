@@ -16,11 +16,20 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.nathanakin.revenuecatgame"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#FF5A1F"
+        }
+      ]
+    ],
     "extra": {
       "revenueCatApiKeyIos": "",
       "revenueCatApiKeyAndroid": ""

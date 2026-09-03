@@ -25,7 +25,9 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
         style,
       ]}
     >
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, variant === 'secondary' && styles.labelSecondary]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -34,17 +36,17 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
   },
   secondary: {
-    backgroundColor: colors.surface,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.border,
   },
   disabled: {
     opacity: 0.5,
@@ -54,7 +56,10 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.text,
-    fontWeight: '700',
-    fontSize: 16,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  labelSecondary: {
+    color: colors.textMuted,
   },
 });

@@ -28,7 +28,8 @@
         {
           "color": "#FF5A1F"
         }
-      ]
+      ],
+      "expo-image"
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

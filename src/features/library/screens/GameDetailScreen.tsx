@@ -61,7 +61,12 @@ export function GameDetailScreen({ route }: Props) {
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <GameCover abbreviation={game.abbreviation} colorKey={game.colorKey} size={96} />
+          <GameCover
+            abbreviation={game.abbreviation}
+            colorKey={game.colorKey}
+            imageUrl={game.coverImageUrl}
+            size={96}
+          />
           <View style={styles.headerInfo}>
             <Text style={typography.heading}>{game.title}</Text>
             <Text style={typography.body}>

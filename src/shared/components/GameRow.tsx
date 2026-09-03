@@ -9,6 +9,7 @@ type GameRowProps = PropsWithChildren<{
   subtitle: string;
   abbreviation: string;
   colorKey: CoverColorKey;
+  imageUrl?: string;
   onPress?: () => void;
   style?: ViewStyle;
 }>;
@@ -18,6 +19,7 @@ export function GameRow({
   subtitle,
   abbreviation,
   colorKey,
+  imageUrl,
   onPress,
   style,
   children,
@@ -28,7 +30,7 @@ export function GameRow({
       disabled={!onPress}
       style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed, style]}
     >
-      <GameCover abbreviation={abbreviation} colorKey={colorKey} size={48} />
+      <GameCover abbreviation={abbreviation} colorKey={colorKey} imageUrl={imageUrl} size={48} />
       <View style={styles.info}>
         <Text style={typography.subheading} numberOfLines={1}>
           {title}

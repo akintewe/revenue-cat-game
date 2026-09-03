@@ -57,6 +57,7 @@ export function WishlistScreen({ navigation }: Props) {
               subtitle={`${item.game.platform} · ${formatReleaseLabel(item.game.releaseDate)}`}
               abbreviation={item.game.abbreviation}
               colorKey={item.game.colorKey}
+              imageUrl={item.game.coverImageUrl}
               onPress={() =>
                 navigation.navigate('GameDetail', { catalogId: item.entry.catalogId })
               }

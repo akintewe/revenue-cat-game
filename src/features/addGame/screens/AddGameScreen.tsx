@@ -70,7 +70,12 @@ export function AddGameScreen({ navigation }: Props) {
                 style={styles.row}
                 onPress={() => navigation.navigate('GameDetail', { catalogId: item.id })}
               >
-                <GameCover abbreviation={item.abbreviation} colorKey={item.colorKey} size={44} />
+                <GameCover
+                  abbreviation={item.abbreviation}
+                  colorKey={item.colorKey}
+                  imageUrl={item.coverImageUrl}
+                  size={44}
+                />
                 <View style={styles.info}>
                   <Text style={typography.subheading} numberOfLines={1}>
                     {item.title}

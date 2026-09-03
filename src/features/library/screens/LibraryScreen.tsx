@@ -66,6 +66,7 @@ export function LibraryScreen({ navigation }: Props) {
               subtitle={`${item.game.platform} · ${item.game.year}`}
               abbreviation={item.game.abbreviation}
               colorKey={item.game.colorKey}
+              imageUrl={item.game.coverImageUrl}
               onPress={() => navigation.navigate('GameDetail', { catalogId: item.entry.catalogId })}
               style={columns > 1 ? styles.gridItem : undefined}
             >

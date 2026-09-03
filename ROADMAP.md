@@ -15,17 +15,18 @@ without needing a server, auth, or third-party accounts.
 - **Save games to play / track status** — done (Library statuses: Playing/Backlog/Beaten/Dropped).
 - **Wishlist** — done.
 - **Easy to search** — done for the mock catalog; carries over once a real games API replaces it.
-- **PC requirements for games** — add a `pcRequirements` field to the catalog schema, surface it on
-  Game Detail for PC titles.
-- **Game reviews (private)** — a free-text note + your own rating on Game Detail. (Public/shared
-  reviews are Phase 3 — they need a backend to aggregate across users.)
-- **Time to beat — your own time** — let the user log hours on a game; show it on Game Detail.
-  ("Average time" and "friends' time" need external data / a backend — Phase 2 and 3.)
-- **Collectible passport stamps** — fully derivable from local library data: games logged
-  milestones (10/50/100), console loyalty (N games on one platform), genres explored. No new data
-  source needed, just a rules engine over `useLibraryStore.entries`.
-- **Reminders for wishlist releases** — local scheduled notifications (`expo-notifications`) fired
-  from a release date already on a wishlist entry. No backend: the OS handles the scheduled fire.
+- **PC requirements for games** — done. `pcRequirements` on `CatalogGame`, shown on Game Detail for
+  PC titles only.
+- **Game reviews (private)** — done. Free-text `notes` field per `LibraryEntry`, shown on Game
+  Detail. (Public/shared reviews are still Phase 3 — they need a backend to aggregate across users.)
+- **Time to beat — your own time** — done. `hoursPlayed` on `LibraryEntry`, editable on Game Detail.
+  ("Average time" and "friends' time" still need external data / a backend — Phase 2 and 3.)
+- **Collectible passport stamps** — done. `src/features/passport` derives games-logged, beaten,
+  genres-explored, and platform-loyalty stamps purely from `useLibraryStore.entries`; linked from
+  Profile.
+- **Reminders for wishlist releases** — done. `src/services/notifications/reminders.ts` schedules a
+  real local notification (`expo-notifications`) against a wishlist entry's release date, armed via
+  the bell toggle and cancelled on remove/disarm.
 
 ## Phase 2 — Needs a third-party API key, not necessarily a custom backend
 

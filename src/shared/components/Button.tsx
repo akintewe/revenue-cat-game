@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   label: {
-    color: colors.text,
+    color: colors.onAccent,
     fontWeight: '800',
     fontSize: 15,
   },

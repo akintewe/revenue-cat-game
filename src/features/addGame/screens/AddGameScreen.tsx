@@ -92,7 +92,7 @@ export function AddGameScreen({ navigation }: Props) {
                   <Ionicons
                     name={added ? 'checkmark' : 'add'}
                     size={20}
-                    color={added ? colors.success : colors.text}
+                    color={added ? colors.success : colors.onAccent}
                   />
                 </Pressable>
               </Pressable>

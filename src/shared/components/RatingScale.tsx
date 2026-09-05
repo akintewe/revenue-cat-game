@@ -51,6 +51,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   labelActive: {
-    color: colors.text,
+    color: colors.onAccent,
   },
 });

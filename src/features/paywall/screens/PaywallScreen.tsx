@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   saveBadgeText: {
-    color: colors.text,
+    color: colors.onAccent,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   ctaLabel: {
-    color: colors.text,
+    color: colors.onAccent,
     fontWeight: '800',
     fontSize: 16,
     textTransform: 'uppercase',

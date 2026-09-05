@@ -1,23 +1,25 @@
 export const colors = {
-  background: '#0B0B0F',
-  surface: '#18181F',
-  surfaceAlt: '#1F1F28',
-  border: '#2A2A35',
-  accent: '#FF5A1F',
-  accentMuted: 'rgba(255, 90, 31, 0.16)',
-  text: '#F5F5F7',
-  textMuted: '#8C8C97',
-  textFaint: '#5C5C66',
-  success: '#35C56A',
-  danger: '#FF5C5C',
-  info: '#4C8DFF',
+  background: '#FFFFFF',
+  surface: '#F2F2F5',
+  surfaceAlt: '#E9E9EE',
+  border: '#E3E3E9',
+  accent: '#FF5A3C',
+  accentMuted: 'rgba(255, 90, 60, 0.12)',
+  /** Text/icon color for content placed on top of an accent-colored background. */
+  onAccent: '#FFFFFF',
+  text: '#15151A',
+  textMuted: '#6E6E78',
+  textFaint: '#9C9CA6',
+  success: '#2E8B57',
+  danger: '#E14B4B',
+  info: '#2F6FED',
 };
 
 export const statusColors = {
-  playing: '#4C8DFF',
+  playing: '#2F6FED',
   backlog: '#8C8C97',
-  beaten: '#35C56A',
-  dropped: '#FF5C5C',
+  beaten: '#2E8B57',
+  dropped: '#E8467F',
 };
 
 export const coverColors: Record<string, string> = {

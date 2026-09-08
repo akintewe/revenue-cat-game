@@ -30,6 +30,10 @@ export type CatalogGame = {
   pcRequirements?: PCRequirements;
   /** Cover art URL. The colorKey/abbreviation swatch is the fallback if this fails to load. */
   coverImageUrl?: string;
+  /** IGDB's own aggregate critic score, 0-100. Not Metacritic. Remote games only. */
+  criticScore?: number;
+  /** "Normal" completion estimate in hours. Only a small slice of remote games have this. */
+  timeToBeatHours?: number;
 };
 
 // A small offline catalog standing in for a real games database (IGDB/RAWG)

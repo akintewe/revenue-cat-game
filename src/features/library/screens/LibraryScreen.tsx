@@ -291,6 +291,10 @@ export function LibraryScreen({ navigation }: Props) {
                 <Text style={styles.gridTitle} numberOfLines={2}>
                   {item.title}
                 </Text>
+                <View style={styles.gridMetaRow}>
+                  <Text style={styles.exploreMetaText}>{item.year ?? '—'}</Text>
+                  <PlatformIcon platform={item.platform} size={12} color={discoverColors.mutedText} />
+                </View>
               </Pressable>
             )}
           />
@@ -536,6 +540,11 @@ const styles = StyleSheet.create({
     color: discoverColors.titleText,
     fontSize: 12,
     fontWeight: '600',
+  },
+  gridMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   gridEmptyText: {
     color: discoverColors.mutedText,

@@ -76,11 +76,7 @@ export function RootNavigator() {
               component={AddGameScreen}
               options={{ headerShown: false, presentation: 'modal' }}
             />
-            <Stack.Screen
-              name="GameDetail"
-              component={GameDetailScreen}
-              options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
-            />
+            <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="AllGames"
               component={AllGamesScreen}

@@ -22,7 +22,7 @@ const FEATURES = [
   {
     icon: 'stats-chart-outline' as const,
     title: 'Backlog stats',
-    description: 'Hours owed, completion rate, what you always drop.',
+    description: 'Hours owed, completion rate, what you always pause.',
   },
   {
     icon: 'sync-outline' as const,

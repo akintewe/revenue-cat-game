@@ -4,7 +4,14 @@ export const GAME_STATUSES: GameStatus[] = ['playing', 'backlog', 'beaten', 'dro
 
 export const STATUS_LABEL: Record<GameStatus, string> = {
   playing: 'Playing',
-  backlog: 'Minilog',
+  backlog: 'Backlog',
   beaten: 'Completed',
-  dropped: 'Liked',
+  dropped: 'Paused',
+};
+
+export const STATUS_ICON: Record<GameStatus, 'play' | 'time-outline' | 'trophy' | 'pause'> = {
+  playing: 'play',
+  backlog: 'time-outline',
+  beaten: 'trophy',
+  dropped: 'pause',
 };

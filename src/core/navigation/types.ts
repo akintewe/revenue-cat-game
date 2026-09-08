@@ -4,16 +4,19 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 export type TabParamList = {
   LibraryTab: undefined;
-  AddTab: undefined;
   WishlistTab: undefined;
   ProfileTab: undefined;
 };
 
 export type RootStackParamList = {
   Tabs: undefined;
+  AddGame: undefined;
   GameDetail: { catalogId: string };
   Paywall: undefined;
   Passport: undefined;
+  AllGames: undefined;
+  Login: undefined;
+  Signup: undefined;
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<

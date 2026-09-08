@@ -29,7 +29,7 @@ export function WishlistScreen({ navigation }: Props) {
   );
 
   return (
-    <Screen>
+    <Screen fadeBottom>
       <View style={styles.header}>
         <Text style={typography.heading}>Wishlist</Text>
         <Text style={typography.body}>
@@ -54,7 +54,8 @@ export function WishlistScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <GameRow
               title={item.game.title}
-              subtitle={`${item.game.platform} · ${formatReleaseLabel(item.game.releaseDate)}`}
+              platform={item.game.platform}
+              detail={formatReleaseLabel(item.game.releaseDate)}
               abbreviation={item.game.abbreviation}
               colorKey={item.game.colorKey}
               imageUrl={item.game.coverImageUrl}
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.sm,
-    paddingBottom: spacing.lg,
+    paddingBottom: 40,
   },
   columnWrapper: {
     gap: spacing.sm,

@@ -5,6 +5,28 @@ import type { GameStatus, LibraryEntry } from '../types';
 
 export const FREE_TIER_GAME_LIMIT = 50;
 
+function seedEntry(catalogId: string, status: GameStatus, daysAgo: number): LibraryEntry {
+  return {
+    catalogId,
+    status,
+    rating: null,
+    addedAt: Date.now() - daysAgo * 86_400_000,
+    notes: '',
+    hoursPlayed: null,
+  };
+}
+
+/** Sample shelf so a fresh install shows a populated library, matching the Figma mockups. */
+const DEFAULT_ENTRIES: LibraryEntry[] = [
+  seedEntry('elden-ring', 'playing', 1),
+  seedEntry('clair-obscur-expedition-33', 'playing', 2),
+  seedEntry('hades-2', 'beaten', 5),
+  seedEntry('pentiment', 'dropped', 9),
+  seedEntry('balatro', 'backlog', 3),
+  seedEntry('hollow-knight-silksong', 'backlog', 4),
+  seedEntry('kirby-air-riders', 'backlog', 6),
+];
+
 type LibraryStore = {
   entries: LibraryEntry[];
   isInLibrary: (catalogId: string) => boolean;
@@ -20,7 +42,7 @@ type LibraryStore = {
 export const useLibraryStore = create<LibraryStore>()(
   persist(
     (set, get) => ({
-      entries: [],
+      entries: DEFAULT_ENTRIES,
 
       isInLibrary: (catalogId) => get().entries.some((entry) => entry.catalogId === catalogId),
 

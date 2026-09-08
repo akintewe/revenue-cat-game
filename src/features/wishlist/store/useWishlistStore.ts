@@ -11,10 +11,17 @@ function syncReminder(catalogId: string, enabled: boolean) {
     return;
   }
   const game = findCatalogGame(catalogId);
-  if (game?.releaseDate) {
-    scheduleReleaseReminder(catalogId, game.title, game.releaseDate);
+  const isUpcoming = Boolean(game?.releaseDate && new Date(game.releaseDate) > new Date());
+  if (game && isUpcoming) {
+    scheduleReleaseReminder(catalogId, game.title, game.releaseDate!);
   }
 }
+
+/** Sample wishlist so a fresh install shows a populated "Explore Saved" shelf. */
+const DEFAULT_ENTRIES: WishlistEntry[] = [
+  { catalogId: 'kirby-air-riders', reminderEnabled: true, addedAt: Date.now() },
+  { catalogId: 'hollow-knight-silksong', reminderEnabled: true, addedAt: Date.now() - 1000 },
+];
 
 type WishlistStore = {
   entries: WishlistEntry[];
@@ -27,7 +34,7 @@ type WishlistStore = {
 export const useWishlistStore = create<WishlistStore>()(
   persist(
     (set, get) => ({
-      entries: [],
+      entries: DEFAULT_ENTRIES,
 
       isWishlisted: (catalogId) => get().entries.some((entry) => entry.catalogId === catalogId),
 

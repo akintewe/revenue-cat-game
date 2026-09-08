@@ -1,12 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { TabNavigator } from './TabNavigator';
+import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
+import { AllGamesScreen } from '../../features/library/screens/AllGamesScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
+import { LoginScreen } from '../../features/auth/screens/LoginScreen';
+import { SignupScreen } from '../../features/auth/screens/SignupScreen';
+import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
 
@@ -24,7 +29,30 @@ const navigationTheme = {
   },
 };
 
+function BackButton({ navigation }: { navigation: { goBack: () => void } }) {
+  return (
+    <Pressable onPress={navigation.goBack} hitSlop={12}>
+      <Ionicons name="chevron-back" size={24} color={colors.text} />
+    </Pressable>
+  );
+}
+
 export function RootNavigator() {
+  const status = useAuthStore((state) => state.status);
+  const initialize = useAuthStore((state) => state.initialize);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  if (status === 'loading') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
@@ -35,36 +63,44 @@ export function RootNavigator() {
           headerTitleStyle: { fontWeight: '700' },
         }}
       >
-        <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
-        <Stack.Screen
-          name="GameDetail"
-          component={GameDetailScreen}
-          options={({ navigation }) => ({
-            title: '',
-            headerLeft: () => (
-              <Pressable onPress={navigation.goBack} hitSlop={12}>
-                <Ionicons name="chevron-back" size={24} color={colors.text} />
-              </Pressable>
-            ),
-          })}
-        />
-        <Stack.Screen
-          name="Paywall"
-          component={PaywallScreen}
-          options={{ presentation: 'modal', headerShown: false }}
-        />
-        <Stack.Screen
-          name="Passport"
-          component={PassportScreen}
-          options={({ navigation }) => ({
-            title: '',
-            headerLeft: () => (
-              <Pressable onPress={navigation.goBack} hitSlop={12}>
-                <Ionicons name="chevron-back" size={24} color={colors.text} />
-              </Pressable>
-            ),
-          })}
-        />
+        {status === 'signedOut' ? (
+          <Stack.Group screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Signup" component={SignupScreen} />
+          </Stack.Group>
+        ) : (
+          <Stack.Group>
+            <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="AddGame"
+              component={AddGameScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="GameDetail"
+              component={GameDetailScreen}
+              options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
+            />
+            <Stack.Screen
+              name="AllGames"
+              component={AllGamesScreen}
+              options={({ navigation }) => ({
+                title: 'All Games',
+                headerLeft: () => <BackButton navigation={navigation} />,
+              })}
+            />
+            <Stack.Screen
+              name="Paywall"
+              component={PaywallScreen}
+              options={{ presentation: 'modal', headerShown: false }}
+            />
+            <Stack.Screen
+              name="Passport"
+              component={PassportScreen}
+              options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
+            />
+          </Stack.Group>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

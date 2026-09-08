@@ -4,10 +4,10 @@ import { radii, spacing, statusColors } from '../theme/theme';
 import { STATUS_LABEL, type GameStatus } from '../types/status';
 
 export function StatusPill({ status }: { status: GameStatus }) {
-  const color = statusColors[status];
+  const { bg, fg } = statusColors[status];
   return (
-    <View style={[styles.base, { backgroundColor: `${color}26`, borderColor: `${color}55` }]}>
-      <Text style={[styles.label, { color }]}>{STATUS_LABEL[status]}</Text>
+    <View style={[styles.base, { backgroundColor: bg }]}>
+      <Text style={[styles.label, { color: fg }]}>{STATUS_LABEL[status]}</Text>
     </View>
   );
 }
@@ -16,14 +16,11 @@ const styles = StyleSheet.create({
   base: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
-    borderRadius: radii.pill,
-    borderWidth: 1,
+    borderRadius: radii.sm,
     alignSelf: 'flex-start',
   },
   label: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

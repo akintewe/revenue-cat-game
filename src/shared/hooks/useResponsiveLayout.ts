@@ -9,6 +9,5 @@ export function useResponsiveLayout() {
   return {
     isWide,
     columns: isWide ? 2 : 1,
-    navPlacement: isWide ? ('rail' as const) : ('bar' as const),
   };
 }

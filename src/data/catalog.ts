@@ -19,7 +19,8 @@ export type CatalogGame = {
   id: string;
   title: string;
   platform: string;
-  year: number;
+  /** Absent for remote-catalog games IGDB has no release date for. */
+  year?: number;
   genre: string;
   abbreviation: string;
   colorKey: CoverColorKey;

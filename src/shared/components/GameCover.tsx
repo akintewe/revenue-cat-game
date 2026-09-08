@@ -26,15 +26,16 @@ export function GameCover({ abbreviation, colorKey, imageUrl, size = 48, style }
         style,
       ]}
     >
-      <Text style={[styles.label, { fontSize: size * 0.32 }]}>{abbreviation}</Text>
-      {showImage && (
+      {showImage ? (
         <Image
           source={{ uri: imageUrl }}
-          style={[StyleSheet.absoluteFill, { borderRadius }]}
+          style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={150}
           onError={() => setImageFailed(true)}
         />
+      ) : (
+        <Text style={[styles.label, { fontSize: size * 0.32 }]}>{abbreviation}</Text>
       )}
     </View>
   );
@@ -44,6 +45,7 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   label: {
     color: 'rgba(255,255,255,0.92)',

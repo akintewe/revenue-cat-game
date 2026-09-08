@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../../shared/components/Screen';
 import { Button } from '../../../shared/components/Button';
 import { GameCover } from '../../../shared/components/GameCover';
@@ -7,19 +7,41 @@ import { SegmentedTabs } from '../../../shared/components/SegmentedTabs';
 import { RatingScale } from '../../../shared/components/RatingScale';
 import { LabeledInput } from '../../../shared/components/LabeledInput';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
-import { findCatalogGame } from '../../../data/catalog';
+import { findCatalogGame, type CatalogGame } from '../../../data/catalog';
+import { resolveCatalogGame } from '../../../services/catalog/unifiedCatalog';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
+import { useRecentlyViewedStore } from '../../addGame/store/useRecentlyViewedStore';
 import { GAME_STATUSES, STATUS_LABEL } from '../types';
+import { STATUS_ICON } from '../../../shared/types/status';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 type Props = RootScreenProps<'GameDetail'>;
 
-const statusOptions = GAME_STATUSES.map((status) => ({ value: status, label: STATUS_LABEL[status] }));
+const statusOptions = GAME_STATUSES.map((status) => ({
+  value: status,
+  label: STATUS_LABEL[status],
+  icon: STATUS_ICON[status],
+}));
 
 export function GameDetailScreen({ route }: Props) {
   const { catalogId } = route.params;
-  const game = findCatalogGame(catalogId);
+  const [game, setGame] = useState<CatalogGame | undefined>(() => findCatalogGame(catalogId));
+  const [loading, setLoading] = useState(!game);
+
+  useEffect(() => {
+    if (game) return;
+    let cancelled = false;
+    setLoading(true);
+    resolveCatalogGame(catalogId).then((resolved) => {
+      if (cancelled) return;
+      setGame(resolved);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogId, game]);
 
   const entry = useLibraryStore((state) => state.getEntry(catalogId));
   const addToLibrary = useLibraryStore((state) => state.addGame);
@@ -30,13 +52,22 @@ export function GameDetailScreen({ route }: Props) {
 
   const isWishlisted = useWishlistStore((state) => state.isWishlisted(catalogId));
   const addToWishlist = useWishlistStore((state) => state.addGame);
+  const recordView = useRecentlyViewedStore((state) => state.recordView);
 
   const [hoursDraft, setHoursDraft] = useState(entry?.hoursPlayed?.toString() ?? '');
+
+  useEffect(() => {
+    if (game) recordView(catalogId);
+  }, [catalogId, game, recordView]);
 
   if (!game) {
     return (
       <Screen>
-        <Text style={typography.subheading}>Game not found</Text>
+        {loading ? (
+          <ActivityIndicator color={colors.accent} style={styles.spacerTop} />
+        ) : (
+          <Text style={typography.subheading}>Game not found</Text>
+        )}
       </Screen>
     );
   }
@@ -70,7 +101,8 @@ export function GameDetailScreen({ route }: Props) {
           <View style={styles.headerInfo}>
             <Text style={typography.heading}>{game.title}</Text>
             <Text style={typography.body}>
-              {game.platform} · {game.genre} · {game.year}
+              {game.platform} · {game.genre}
+              {game.year ? ` · ${game.year}` : ''}
             </Text>
           </View>
         </View>
@@ -127,7 +159,7 @@ export function GameDetailScreen({ route }: Props) {
             )}
 
             <Button
-              label={entry.status === 'beaten' ? 'Beaten' : 'Mark beaten'}
+              label={entry.status === 'beaten' ? 'Completed' : 'Mark as completed'}
               onPress={handleMarkBeaten}
               disabled={entry.status === 'beaten'}
               style={styles.spacerTop}

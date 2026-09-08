@@ -7,6 +7,7 @@ import { Button } from '../../../shared/components/Button';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { APP_NAME, PLUS_ENTITLEMENT_ID } from '../../../shared/constants/app';
 import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
+import { useAuthStore } from '../../auth/store/useAuthStore';
 import {
   getCustomerInfo,
   hasActiveEntitlement,
@@ -19,6 +20,8 @@ type Props = TabScreenProps<'ProfileTab'>;
 export function ProfileScreen({ navigation }: Props) {
   const [isPlus, setIsPlus] = useState(false);
   const gameCount = useLibraryStore((state) => state.entries.length);
+  const signOut = useAuthStore((state) => state.signOut);
+  const userEmail = useAuthStore((state) => state.session?.user.email);
 
   useFocusEffect(
     useCallback(() => {
@@ -47,6 +50,7 @@ export function ProfileScreen({ navigation }: Props) {
   return (
     <Screen>
       <Text style={typography.heading}>Profile</Text>
+      {userEmail && <Text style={styles.email}>{userEmail}</Text>}
 
       <View style={styles.card}>
         <View style={styles.cardRow}>
@@ -82,11 +86,32 @@ export function ProfileScreen({ navigation }: Props) {
         <Text style={typography.subheading}>Restore purchases</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </Pressable>
+
+      <Pressable
+        style={styles.linkRow}
+        onPress={() =>
+          Alert.alert('Log out', 'Are you sure you want to log out?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log out', style: 'destructive', onPress: signOut },
+          ])
+        }
+      >
+        <Text style={[typography.subheading, styles.logoutLabel]}>Log out</Text>
+        <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  email: {
+    color: colors.textMuted,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  logoutLabel: {
+    color: colors.danger,
+  },
   card: {
     marginTop: spacing.lg,
     backgroundColor: colors.surface,

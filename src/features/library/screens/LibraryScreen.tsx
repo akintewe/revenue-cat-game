@@ -87,10 +87,6 @@ export function LibraryScreen({ navigation }: Props) {
 
   const { games: recentlyPlayed, loading: recentlyPlayedLoading } = useResolvedGames(recentlyViewedIds);
 
-  const localPopularFallback = useMemo(
-    () => CATALOG.filter((game) => !libraryIds.has(game.id)).slice(0, EXPLORE_POPULAR_LIMIT),
-    [libraryIds],
-  );
   const [popularSuggestions, setPopularSuggestions] = useState<CatalogGame[]>([]);
   const [popularLoading, setPopularLoading] = useState(true);
   const libraryIdsKey = Array.from(libraryIds).join(',');
@@ -98,9 +94,9 @@ export function LibraryScreen({ navigation }: Props) {
   useEffect(() => {
     let cancelled = false;
     setPopularLoading(true);
-    fetchPopularSuggestions(libraryIds, EXPLORE_POPULAR_LIMIT).then(({ games, error }) => {
+    fetchPopularSuggestions(libraryIds, EXPLORE_POPULAR_LIMIT).then(({ games }) => {
       if (cancelled) return;
-      setPopularSuggestions(error ? [] : games);
+      setPopularSuggestions(games);
       setPopularLoading(false);
     });
     return () => {
@@ -109,7 +105,7 @@ export function LibraryScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryIdsKey]);
 
-  const popularToShow = popularSuggestions.length > 0 || popularLoading ? popularSuggestions : localPopularFallback;
+  const popularToShow = popularSuggestions;
 
   const { games: savedGamesAll, loading: savedGamesLoading } = useResolvedGames(wishlistIds);
   const savedGames = savedGamesAll.slice(0, EXPLORE_SAVED_LIMIT);

@@ -12,6 +12,7 @@ import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
+import { useLibraryStore } from '../../features/library/store/useLibraryStore';
 import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
 
@@ -45,6 +46,14 @@ export function RootNavigator() {
     initialize();
   }, [initialize]);
 
+  useEffect(() => {
+    if (status === 'signedIn') {
+      useLibraryStore.getState().hydrate();
+    } else if (status === 'signedOut') {
+      useLibraryStore.getState().reset();
+    }
+  }, [status]);
+
   if (status === 'loading') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
@@ -74,7 +83,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}
-              options={{ headerShown: false, presentation: 'modal' }}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen

@@ -1,30 +1,29 @@
 import { findCatalogGame, searchCatalog, type CatalogGame } from '../../data/catalog';
-import { getRemoteCatalogGame, searchRemoteCatalog } from './remoteCatalog';
+import { isUuid } from '../../shared/utils/id';
+import {
+  fetchRemotePopularGames,
+  getRemoteCatalogGame,
+  searchRemoteCatalog,
+} from './remoteCatalog';
 import { normalizeRemoteGame } from './normalize';
-
-// There's no "browse popular" endpoint on the backend (89k games, search-only by design),
-// so "Explore popular" is seeded by searching a handful of broadly recognizable titles and
-// taking the top hit from each — a stand-in for real trending data.
-const POPULAR_SEED_QUERIES = [
-  'The Legend of Zelda',
-  'Grand Theft Auto',
-  'Minecraft',
-  'Spider-Man',
-  "Baldur's Gate",
-  'God of War',
-  'The Witcher',
-  'Red Dead Redemption',
-  'Final Fantasy',
-  'Call of Duty',
-  'Resident Evil',
-  'Elden Ring',
-  'Assassin\'s Creed',
-  'Mario Kart',
-  'Halo',
-];
 
 /** Caches normalized remote lookups so repeat views (and every consumer of useResolvedGames) don't refetch. */
 const remoteCache = new Map<string, CatalogGame>();
+
+/**
+ * The small local demo catalog uses plain slugs, but the real library_entries table has a
+ * uuid foreign key into the live catalog — a slug id can't be written there. Resolves a demo
+ * game to its real backend id by title, for the rare case one still turns up in search results.
+ */
+export async function resolveRemoteId(title: string): Promise<string | null> {
+  try {
+    const results = await searchRemoteCatalog(title);
+    const exact = results.find((game) => game.title.toLowerCase() === title.toLowerCase());
+    return (exact ?? results[0])?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Resolves a catalogId to a game, checking the small local demo catalog first
@@ -74,40 +73,39 @@ export async function searchAllCatalog(query: string): Promise<CatalogSearchResu
 
 export type PopularSuggestionsResult = {
   games: CatalogGame[];
-  /** Set only if every seed query failed (e.g. not signed in) — a single bad query is skipped silently. */
+  /** Set when the live call failed (e.g. not signed in). */
   error: string | null;
 };
 
 /**
- * Pulls a small "Explore popular" shelf from the live catalog by searching a fixed set of
- * well-known titles and taking the top hit from each, skipping anything already owned.
+ * Real trending games from GET /games/popular — most-rated first, skipping anything
+ * already owned. Pages forward if a page is entirely excluded games.
  */
 export async function fetchPopularSuggestions(
   excludeIds: Set<string>,
   limit: number,
 ): Promise<PopularSuggestionsResult> {
-  const results = await Promise.allSettled(POPULAR_SEED_QUERIES.map((q) => searchRemoteCatalog(q)));
-
   const games: CatalogGame[] = [];
-  const seen = new Set<string>();
-  let failures = 0;
+  let offset = 0;
+  const PAGE_SIZE = Math.max(limit * 2, 20);
+  const MAX_PAGES = 5;
 
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      failures += 1;
-      continue;
+  try {
+    for (let page = 0; page < MAX_PAGES && games.length < limit; page++) {
+      const remoteResults = await fetchRemotePopularGames(PAGE_SIZE, offset);
+      if (remoteResults.length === 0) break;
+      offset += remoteResults.length;
+
+      for (const remote of remoteResults) {
+        if (excludeIds.has(remote.id)) continue;
+        const normalized = normalizeRemoteGame(remote);
+        remoteCache.set(normalized.id, normalized);
+        games.push(normalized);
+        if (games.length >= limit) break;
+      }
     }
-    const top = result.value.find((game) => !excludeIds.has(game.id) && !seen.has(game.id));
-    if (!top) continue;
-    const normalized = normalizeRemoteGame(top);
-    remoteCache.set(normalized.id, normalized);
-    seen.add(normalized.id);
-    games.push(normalized);
-    if (games.length >= limit) break;
+    return { games, error: null };
+  } catch (err) {
+    return { games, error: err instanceof Error ? err.message : 'Could not reach the catalog' };
   }
-
-  return {
-    games,
-    error: failures === POPULAR_SEED_QUERIES.length ? 'Could not reach the catalog' : null,
-  };
 }

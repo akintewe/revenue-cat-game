@@ -1,118 +1,161 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 import type { GameStatus, LibraryEntry } from '../types';
+import { useAuthStore } from '../../auth/store/useAuthStore';
+import {
+  deleteLibraryEntry,
+  fetchLibraryEntries,
+  insertLibraryEntry,
+  updateLibraryEntry,
+} from '../../../services/library/remoteLibrary';
 
 export const FREE_TIER_GAME_LIMIT = 50;
 
-function seedEntry(catalogId: string, status: GameStatus, daysAgo: number): LibraryEntry {
-  return {
-    catalogId,
-    status,
-    rating: null,
-    addedAt: Date.now() - daysAgo * 86_400_000,
-    notes: '',
-    hoursPlayed: null,
-  };
+function currentUserId(): string | null {
+  return useAuthStore.getState().session?.user.id ?? null;
 }
-
-/** Sample shelf so a fresh install shows a populated library, matching the Figma mockups. */
-const DEFAULT_ENTRIES: LibraryEntry[] = [
-  seedEntry('elden-ring', 'playing', 1),
-  seedEntry('clair-obscur-expedition-33', 'playing', 2),
-  seedEntry('hades-2', 'beaten', 5),
-  seedEntry('pentiment', 'dropped', 9),
-  seedEntry('balatro', 'backlog', 3),
-  seedEntry('hollow-knight-silksong', 'backlog', 4),
-  seedEntry('kirby-air-riders', 'backlog', 6),
-];
 
 type LibraryStore = {
   entries: LibraryEntry[];
+  loading: boolean;
+  hydrated: boolean;
+  /** Pulls the signed-in user's real library from the backend. Call on sign-in. */
+  hydrate: () => Promise<void>;
+  /** Clears local state. Call on sign-out — this data is per-account, not device-wide. */
+  reset: () => void;
   isInLibrary: (catalogId: string) => boolean;
   getEntry: (catalogId: string) => LibraryEntry | undefined;
-  addGame: (catalogId: string) => void;
-  removeGame: (catalogId: string) => void;
-  setStatus: (catalogId: string, status: GameStatus) => void;
-  setRating: (catalogId: string, rating: number) => void;
-  setNotes: (catalogId: string, notes: string) => void;
-  setHoursPlayed: (catalogId: string, hours: number | null) => void;
+  addGame: (catalogId: string) => Promise<void>;
+  removeGame: (catalogId: string) => Promise<void>;
+  setStatus: (catalogId: string, status: GameStatus) => Promise<void>;
+  setRating: (catalogId: string, rating: number) => Promise<void>;
+  setNotes: (catalogId: string, notes: string) => Promise<void>;
+  setHoursPlayed: (catalogId: string, hours: number | null) => Promise<void>;
 };
 
-export const useLibraryStore = create<LibraryStore>()(
-  persist(
-    (set, get) => ({
-      entries: DEFAULT_ENTRIES,
+export const useLibraryStore = create<LibraryStore>((set, get) => ({
+  entries: [],
+  loading: false,
+  hydrated: false,
 
-      isInLibrary: (catalogId) => get().entries.some((entry) => entry.catalogId === catalogId),
+  hydrate: async () => {
+    if (!currentUserId()) return;
+    set({ loading: true });
+    try {
+      const entries = await fetchLibraryEntries();
+      set({ entries, loading: false, hydrated: true });
+    } catch {
+      // Keep whatever's already in memory; the next hydrate (e.g. app foreground) retries.
+      set({ loading: false, hydrated: true });
+    }
+  },
 
-      getEntry: (catalogId) => get().entries.find((entry) => entry.catalogId === catalogId),
+  reset: () => set({ entries: [], loading: false, hydrated: false }),
 
-      addGame: (catalogId) =>
-        set((state) => {
-          if (state.entries.some((entry) => entry.catalogId === catalogId)) return state;
-          const entry: LibraryEntry = {
-            catalogId,
-            status: 'backlog',
-            rating: null,
-            addedAt: Date.now(),
-            notes: '',
-            hoursPlayed: null,
-          };
-          return { entries: [entry, ...state.entries] };
-        }),
+  isInLibrary: (catalogId) => get().entries.some((entry) => entry.catalogId === catalogId),
 
-      removeGame: (catalogId) =>
-        set((state) => ({
-          entries: state.entries.filter((entry) => entry.catalogId !== catalogId),
-        })),
+  getEntry: (catalogId) => get().entries.find((entry) => entry.catalogId === catalogId),
 
-      setStatus: (catalogId, status) =>
-        set((state) => ({
-          entries: state.entries.map((entry) =>
-            entry.catalogId === catalogId ? { ...entry, status } : entry,
-          ),
-        })),
+  addGame: async (catalogId) => {
+    const userId = currentUserId();
+    if (!userId || get().isInLibrary(catalogId)) return;
 
-      setRating: (catalogId, rating) =>
-        set((state) => ({
-          entries: state.entries.map((entry) =>
-            entry.catalogId === catalogId ? { ...entry, rating } : entry,
-          ),
-        })),
+    const optimistic: LibraryEntry = {
+      catalogId,
+      status: 'backlog',
+      rating: null,
+      addedAt: Date.now(),
+      notes: '',
+      hoursPlayed: null,
+    };
+    set((state) => ({ entries: [optimistic, ...state.entries] }));
 
-      setNotes: (catalogId, notes) =>
-        set((state) => ({
-          entries: state.entries.map((entry) =>
-            entry.catalogId === catalogId ? { ...entry, notes } : entry,
-          ),
-        })),
+    try {
+      await insertLibraryEntry(userId, catalogId);
+    } catch (err) {
+      console.warn('[library] addGame failed', err);
+      set((state) => ({ entries: state.entries.filter((entry) => entry.catalogId !== catalogId) }));
+    }
+  },
 
-      setHoursPlayed: (catalogId, hoursPlayed) =>
-        set((state) => ({
-          entries: state.entries.map((entry) =>
-            entry.catalogId === catalogId ? { ...entry, hoursPlayed } : entry,
-          ),
-        })),
-    }),
-    {
-      name: 'library-store',
-      version: 1,
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ entries: state.entries }),
-      migrate: (persistedState) => {
-        const state = persistedState as { entries?: Partial<LibraryEntry>[] };
-        return {
-          entries: (state.entries ?? []).map((entry) => ({
-            catalogId: entry.catalogId ?? '',
-            status: entry.status ?? 'backlog',
-            rating: entry.rating ?? null,
-            addedAt: entry.addedAt ?? Date.now(),
-            notes: entry.notes ?? '',
-            hoursPlayed: entry.hoursPlayed ?? null,
-          })),
-        };
-      },
-    },
-  ),
-);
+  removeGame: async (catalogId) => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    const previous = get().entries;
+    set((state) => ({ entries: state.entries.filter((entry) => entry.catalogId !== catalogId) }));
+
+    try {
+      await deleteLibraryEntry(userId, catalogId);
+    } catch (err) {
+      console.warn('[library] removeGame failed', err);
+      set({ entries: previous });
+    }
+  },
+
+  setStatus: async (catalogId, status) => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    const previous = get().entries;
+    set((state) => ({
+      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, status } : entry)),
+    }));
+
+    try {
+      await updateLibraryEntry(userId, catalogId, {
+        status,
+        ...(status === 'beaten' ? { finished_at: new Date().toISOString() } : {}),
+      });
+    } catch (err) {
+      console.warn('[library] setStatus failed', err);
+      set({ entries: previous });
+    }
+  },
+
+  setRating: async (catalogId, rating) => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    const previous = get().entries;
+    set((state) => ({
+      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, rating } : entry)),
+    }));
+
+    try {
+      await updateLibraryEntry(userId, catalogId, { rating });
+    } catch (err) {
+      console.warn('[library] setRating failed', err);
+      set({ entries: previous });
+    }
+  },
+
+  setNotes: async (catalogId, notes) => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    set((state) => ({
+      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, notes } : entry)),
+    }));
+
+    try {
+      await updateLibraryEntry(userId, catalogId, { notes });
+    } catch {
+      // Best-effort — free text isn't worth rolling back mid-type; next hydrate reconciles.
+    }
+  },
+
+  setHoursPlayed: async (catalogId, hoursPlayed) => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    set((state) => ({
+      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, hoursPlayed } : entry)),
+    }));
+
+    try {
+      await updateLibraryEntry(userId, catalogId, { hours_played: hoursPlayed });
+    } catch {
+      // Best-effort, same as notes.
+    }
+  },
+}));

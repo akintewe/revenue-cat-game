@@ -25,3 +25,16 @@ export async function getRemoteCatalogGame(id: string): Promise<RemoteCatalogGam
   if (error) throw error;
   return data ?? null;
 }
+
+/** Real trending games — ordered by IGDB rating-count, most-rated first. Paginated; not infinite. */
+export async function fetchRemotePopularGames(
+  limit: number,
+  offset = 0,
+): Promise<RemoteCatalogGame[]> {
+  const { data, error } = await supabase.functions.invoke<RemoteCatalogGame[]>(
+    `games/popular?limit=${limit}&offset=${offset}`,
+    { method: 'GET' },
+  );
+  if (error) throw error;
+  return data ?? [];
+}

@@ -14,9 +14,13 @@ type LibraryRow = {
   notes: string | null;
   hours_played: number | null;
   added_at: string;
+  source_url: string | null;
+  source_kind: LibraryEntry['sourceKind'];
+  finished_at: string | null;
 };
 
-const LIBRARY_COLUMNS = 'game_id, status, rating, notes, hours_played, added_at';
+const LIBRARY_COLUMNS =
+  'game_id, status, rating, notes, hours_played, added_at, source_url, source_kind, finished_at';
 
 function rowToEntry(row: LibraryRow): LibraryEntry {
   return {
@@ -26,6 +30,9 @@ function rowToEntry(row: LibraryRow): LibraryEntry {
     notes: row.notes ?? '',
     hoursPlayed: row.hours_played,
     addedAt: new Date(row.added_at).getTime(),
+    sourceUrl: row.source_url,
+    sourceKind: row.source_kind,
+    finishedAt: row.finished_at ? new Date(row.finished_at).getTime() : null,
   };
 }
 

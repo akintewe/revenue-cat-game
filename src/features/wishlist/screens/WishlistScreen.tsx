@@ -6,7 +6,7 @@ import { GameRow } from '../../../shared/components/GameRow';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import { useResponsiveLayout } from '../../../shared/hooks/useResponsiveLayout';
-import { findCatalogGame } from '../../../data/catalog';
+import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { formatReleaseLabel } from '../../../shared/utils/formatDate';
 import { useWishlistStore } from '../store/useWishlistStore';
 import type { TabScreenProps } from '../../../core/navigation/types';
@@ -18,15 +18,17 @@ export function WishlistScreen({ navigation }: Props) {
   const toggleReminder = useWishlistStore((state) => state.toggleReminder);
   const { columns } = useResponsiveLayout();
 
-  const rows = useMemo(
-    () =>
-      entries
-        .map((entry) => ({ entry, game: findCatalogGame(entry.catalogId) }))
-        .filter((row): row is { entry: typeof row.entry; game: NonNullable<typeof row.game> } =>
-          Boolean(row.game),
-        ),
-    [entries],
-  );
+  const entryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
+  const { games } = useResolvedGames(entryIds);
+
+  const rows = useMemo(() => {
+    const byId = new Map(games.map((game) => [game.id, game]));
+    return entries
+      .map((entry) => ({ entry, game: byId.get(entry.catalogId) }))
+      .filter((row): row is { entry: typeof row.entry; game: NonNullable<typeof row.game> } =>
+        Boolean(row.game),
+      );
+  }, [entries, games]);
 
   return (
     <Screen fadeBottom>

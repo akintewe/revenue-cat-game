@@ -66,6 +66,9 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       addedAt: Date.now(),
       notes: '',
       hoursPlayed: null,
+      sourceUrl: null,
+      sourceKind: 'search',
+      finishedAt: null,
     };
     set((state) => ({ entries: [optimistic, ...state.entries] }));
 
@@ -97,14 +100,15 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     if (!userId) return;
 
     const previous = get().entries;
+    const finishedAt = status === 'beaten' ? Date.now() : previous.find((e) => e.catalogId === catalogId)?.finishedAt ?? null;
     set((state) => ({
-      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, status } : entry)),
+      entries: state.entries.map((entry) => (entry.catalogId === catalogId ? { ...entry, status, finishedAt } : entry)),
     }));
 
     try {
       await updateLibraryEntry(userId, catalogId, {
         status,
-        ...(status === 'beaten' ? { finished_at: new Date().toISOString() } : {}),
+        ...(status === 'beaten' ? { finished_at: new Date(finishedAt as number).toISOString() } : {}),
       });
     } catch (err) {
       console.warn('[library] setStatus failed', err);

@@ -9,17 +9,23 @@
     "scheme": "prysm",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nathanakin.revenuecatgame"
+      "bundleIdentifier": "com.nathanakin.revenuecatgame",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#090909",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.nathanakin.revenuecatgame"
+      "package": "com.nathanakin.revenuecatgame",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,11 +37,33 @@
           "color": "#FF5A3C"
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Prysm uses your photo library to attach images to posts."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-lockup.png",
+          "imageWidth": 220,
+          "backgroundColor": "#090909",
+          "dark": {
+            "image": "./assets/splash-lockup.png",
+            "backgroundColor": "#090909"
+          }
+        }
+      ]
     ],
     "extra": {
       "revenueCatApiKeyIos": "",
-      "revenueCatApiKeyAndroid": ""
-    }
+      "revenueCatApiKeyAndroid": "",
+      "eas": {
+        "projectId": "4c28ff2a-446c-4a5f-9499-9050d7a8489f"
+      }
+    },
+    "owner": "prysmapp"
   }
 }

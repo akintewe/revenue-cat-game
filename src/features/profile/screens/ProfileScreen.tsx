@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Screen } from '../../../shared/components/Screen';
@@ -13,6 +13,7 @@ import {
   hasActiveEntitlement,
   restorePurchases,
 } from '../../../services/revenuecat/purchases';
+import { fetchMyShareActivity, setShareActivity } from '../../../services/social/profiles';
 import type { TabScreenProps } from '../../../core/navigation/types';
 
 type Props = TabScreenProps<'ProfileTab'>;
@@ -21,7 +22,26 @@ export function ProfileScreen({ navigation }: Props) {
   const [isPlus, setIsPlus] = useState(false);
   const gameCount = useLibraryStore((state) => state.entries.length);
   const signOut = useAuthStore((state) => state.signOut);
+  const userId = useAuthStore((state) => state.session?.user.id);
   const userEmail = useAuthStore((state) => state.session?.user.email);
+
+  const [shareActivity, setShareActivityState] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchMyShareActivity(userId)
+      .then(setShareActivityState)
+      .catch(() => undefined);
+  }, [userId]);
+
+  function handleToggleShareActivity(enabled: boolean) {
+    if (!userId) return;
+    setShareActivityState(enabled);
+    setShareActivity(userId, enabled).catch((err) => {
+      console.warn('[profile] setShareActivity failed', err);
+      setShareActivityState(!enabled);
+    });
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -82,6 +102,21 @@ export function ProfileScreen({ navigation }: Props) {
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </Pressable>
 
+      <View style={styles.linkRow}>
+        <View style={styles.toggleLabelGroup}>
+          <Text style={typography.subheading}>Share activity with friends</Text>
+          <Text style={styles.toggleHint}>
+            Lets people who follow you count your games in "Popular with friends". Never reveals which games.
+          </Text>
+        </View>
+        <Switch
+          value={shareActivity}
+          onValueChange={handleToggleShareActivity}
+          trackColor={{ false: colors.border, true: colors.accent }}
+          thumbColor={colors.onAccent}
+        />
+      </View>
+
       <Pressable style={styles.linkRow} onPress={handleRestore}>
         <Text style={typography.subheading}>Restore purchases</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -135,5 +170,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  toggleLabelGroup: {
+    flex: 1,
+    gap: 2,
+    paddingRight: spacing.md,
+  },
+  toggleHint: {
+    color: colors.textFaint,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

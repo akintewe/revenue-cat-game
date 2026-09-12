@@ -1,22 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Pressable } from 'react-native';
 import { TabNavigator } from './TabNavigator';
+import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
-import { AllGamesScreen } from '../../features/library/screens/AllGamesScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
+import { useWishlistStore } from '../../features/wishlist/store/useWishlistStore';
+import { ensureProfile } from '../../services/social/profiles';
 import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
+const MIN_SPLASH_MS = 700;
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -40,26 +45,34 @@ function BackButton({ navigation }: { navigation: { goBack: () => void } }) {
 
 export function RootNavigator() {
   const status = useAuthStore((state) => state.status);
+  const session = useAuthStore((state) => state.session);
   const initialize = useAuthStore((state) => state.initialize);
+  const [minSplashElapsed, setMinSplashElapsed] = useState(false);
 
   useEffect(() => {
     initialize();
+    const timer = setTimeout(() => setMinSplashElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(timer);
   }, [initialize]);
 
   useEffect(() => {
     if (status === 'signedIn') {
       useLibraryStore.getState().hydrate();
+      useWishlistStore.getState().hydrate();
+      if (session?.user.email) {
+        ensureProfile(session.user.id, session.user.email).catch((err) =>
+          console.warn('[profiles] ensureProfile failed', err),
+        );
+      }
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
+      useWishlistStore.getState().reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  if (status === 'loading') {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+  if (status === 'loading' || !minSplashElapsed) {
+    return <SplashScreen />;
   }
 
   return (
@@ -86,14 +99,6 @@ export function RootNavigator() {
               options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
-            <Stack.Screen
-              name="AllGames"
-              component={AllGamesScreen}
-              options={({ navigation }) => ({
-                title: 'All Games',
-                headerLeft: () => <BackButton navigation={navigation} />,
-              })}
-            />
             <Stack.Screen
               name="Paywall"
               component={PaywallScreen}

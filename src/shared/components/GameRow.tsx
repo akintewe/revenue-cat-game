@@ -1,9 +1,8 @@
 import React, { PropsWithChildren } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
 import { GameCover } from './GameCover';
+import { PlatformIcon } from './PlatformIcon';
 import { colors, spacing } from '../theme/theme';
-import { platformImage } from '../utils/platformImage';
 import type { CoverColorKey } from '../../data/catalog';
 
 type GameRowProps = PropsWithChildren<{
@@ -30,8 +29,6 @@ export function GameRow({
   style,
   children,
 }: GameRowProps) {
-  const logo = platformImage(platform);
-
   return (
     <Pressable
       onPress={onPress}
@@ -50,7 +47,7 @@ export function GameRow({
           {title}
         </Text>
         <View style={styles.subtitleRow}>
-          {logo && <Image source={logo} style={styles.platformLogo} contentFit="contain" />}
+          <PlatformIcon platform={platform} size={14} color={colors.textMuted} />
           <Text style={styles.subtitle} numberOfLines={1}>
             {platform} · {detail}
           </Text>
@@ -86,10 +83,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  platformLogo: {
-    width: 14,
-    height: 14,
   },
   subtitle: {
     color: colors.textMuted,

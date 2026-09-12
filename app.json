@@ -55,7 +55,8 @@
             "backgroundColor": "#090909"
           }
         }
-      ]
+      ],
+      "expo-share-intent"
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

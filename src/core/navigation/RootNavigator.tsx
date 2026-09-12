@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
+import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
 import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
+import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
@@ -19,6 +21,7 @@ import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 /** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
 const MIN_SPLASH_MS = 700;
@@ -48,6 +51,17 @@ export function RootNavigator() {
   const session = useAuthStore((state) => state.session);
   const initialize = useAuthStore((state) => state.initialize);
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+
+  useEffect(() => {
+    if (!hasShareIntent || status !== 'signedIn') return;
+    const url = shareIntent.webUrl ?? shareIntent.text?.match(/https?:\/\/\S+/)?.[0];
+    if (url && navigationRef.isReady()) {
+      navigationRef.navigate('ShareConfirm', { url });
+    }
+    resetShareIntent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasShareIntent, status]);
 
   useEffect(() => {
     initialize();
@@ -76,7 +90,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
@@ -99,6 +113,11 @@ export function RootNavigator() {
               options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="ShareConfirm"
+              component={ShareConfirmScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+            />
             <Stack.Screen
               name="Paywall"
               component={PaywallScreen}

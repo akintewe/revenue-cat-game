@@ -14,6 +14,7 @@ export type RootStackParamList = {
   GameDetail: { catalogId: string };
   Paywall: undefined;
   Passport: undefined;
+  ShareConfirm: { url: string };
   Login: undefined;
   Signup: undefined;
 };

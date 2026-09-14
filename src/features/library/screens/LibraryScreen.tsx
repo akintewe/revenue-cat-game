@@ -17,13 +17,12 @@ import { colors, coverColors, discoverColors, radii, spacing } from '../../../sh
 import { APP_NAME } from '../../../shared/constants/app';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
-import { useRecentlyViewedStore } from '../../addGame/store/useRecentlyViewedStore';
 import { CATALOG, type CatalogGame } from '../../../data/catalog';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { fetchPopularSuggestions, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
 import { GAME_STATUSES, STATUS_LABEL, type GameStatus } from '../types';
 import { STATUS_ICON } from '../../../shared/types/status';
-import { formatReleaseLabel } from '../../../shared/utils/formatDate';
+import { formatReleaseLabel, timeAgo } from '../../../shared/utils/formatDate';
 import {
   createPost,
   deletePost,
@@ -34,15 +33,18 @@ import {
   uploadPostImage,
   type FeedPost,
 } from '../../../services/social/feed';
+import { CommentsSheet } from '../components/CommentsSheet';
 import { useAuthStore } from '../../auth/store/useAuthStore';
-import { fetchMyAvatarColor } from '../../../services/social/profiles';
+import { fetchMyAvatarColor, fetchMyDisplayName } from '../../../services/social/profiles';
 import type { CoverColorKey } from '../../../data/catalog';
 import type { TabScreenProps } from '../../../core/navigation/types';
+import { Sidebar } from '../../../core/navigation/Sidebar';
 
 const GRID_SEARCH_DEBOUNCE_MS = 350;
 const GRID_POPULAR_LIMIT = 15;
 
 const NAV_BELL_ICON = require('../../../../assets/figma-icons/nav-bell.png') as ImageSource;
+const PRYSM_WORDMARK = require('../../../../assets/figma-icons/prysm-wordmark.png') as ImageSource;
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
 const CHEVRON_ICON = require('../../../../assets/figma-icons/chevron-forward.png') as ImageSource;
 
@@ -70,32 +72,34 @@ const LIBRARY_RECENT_LIMIT = 5;
 const NAV_CLEARANCE = 40;
 const EXPLORE_POPULAR_LIMIT = 3;
 const EXPLORE_SAVED_LIMIT = 6;
+const TOP_PLAYED_LIMIT = 10;
 
 type DashboardTab = 'games' | 'friends';
 
-function timeAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return 'now';
-  const minutes = seconds / 60;
-  if (minutes < 60) return `${Math.floor(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${Math.floor(hours)}h`;
-  const days = hours / 24;
-  if (days < 7) return `${Math.floor(days)}d`;
-  return `${Math.floor(days / 7)}w`;
-}
-
 type Props = TabScreenProps<'LibraryTab'>;
 
-export function LibraryScreen({ navigation }: Props) {
+export function LibraryScreen({ navigation, route }: Props) {
   const [tab, setTab] = useState<DashboardTab>('games');
   const userId = useAuthStore((state) => state.session?.user.id);
   const [myAvatarColor, setMyAvatarColor] = useState<CoverColorKey | null>(null);
+  const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  useEffect(() => {
+    if (route.params?.openBrowse) {
+      openLibraryBrowser();
+      navigation.setParams({ openBrowse: undefined });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.openBrowse]);
 
   useEffect(() => {
     if (!userId) return;
     fetchMyAvatarColor(userId)
       .then(setMyAvatarColor)
+      .catch(() => undefined);
+    fetchMyDisplayName(userId)
+      .then(setMyDisplayName)
       .catch(() => undefined);
   }, [userId]);
 
@@ -114,6 +118,7 @@ export function LibraryScreen({ navigation }: Props) {
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [composerImage, setComposerImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [posting, setPosting] = useState(false);
@@ -176,6 +181,10 @@ export function LibraryScreen({ navigation }: Props) {
     ]);
   }
 
+  function handleCommentAdded(postId: string) {
+    setFeedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comment_count: p.comment_count + 1 } : p)));
+  }
+
   async function handlePickComposerImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -211,12 +220,28 @@ export function LibraryScreen({ navigation }: Props) {
   const entries = useLibraryStore((state) => state.entries);
   const addGame = useLibraryStore((state) => state.addGame);
   const wishlistEntries = useWishlistStore((state) => state.entries);
-  const recentlyViewedIds = useRecentlyViewedStore((state) => state.catalogIds);
 
   const libraryIds = useMemo(() => new Set(entries.map((entry) => entry.catalogId)), [entries]);
   const wishlistIds = useMemo(() => wishlistEntries.map((entry) => entry.catalogId), [wishlistEntries]);
 
-  const { games: recentlyPlayed, loading: recentlyPlayedLoading } = useResolvedGames(recentlyViewedIds);
+  const allEntryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
+  const { games: allLibraryGames, loading: allLibraryLoading } = useResolvedGames(allEntryIds);
+
+  const libraryRows = useMemo(() => {
+    const byId = new Map(allLibraryGames.map((game) => [game.id, game]));
+    return entries
+      .map((entry) => ({ entry, game: byId.get(entry.catalogId) }))
+      .filter((row): row is { entry: (typeof entries)[number]; game: CatalogGame } => Boolean(row.game));
+  }, [entries, allLibraryGames]);
+
+  // Steam gives us total hours per game but no last-played date or per-device playtime,
+  // so "most played" is the honest signal — not a fabricated "recently played".
+  const topPlayed = useMemo(() => {
+    return [...libraryRows]
+      .sort((a, b) => (b.entry.hoursPlayed ?? 0) - (a.entry.hoursPlayed ?? 0))
+      .slice(0, TOP_PLAYED_LIMIT)
+      .map((row) => row.game);
+  }, [libraryRows]);
 
   const [popularSuggestions, setPopularSuggestions] = useState<CatalogGame[]>([]);
   const [popularLoading, setPopularLoading] = useState(true);
@@ -241,27 +266,17 @@ export function LibraryScreen({ navigation }: Props) {
   const { games: savedGamesAll, loading: savedGamesLoading } = useResolvedGames(wishlistIds);
   const savedGames = savedGamesAll.slice(0, EXPLORE_SAVED_LIMIT);
 
-  const stillLoading = recentlyPlayedLoading || savedGamesLoading || popularLoading;
+  const stillLoading = allLibraryLoading || savedGamesLoading || popularLoading;
   const hasAnyContent =
-    stillLoading || recentlyPlayed.length > 0 || popularToShow.length > 0 || savedGames.length > 0;
+    stillLoading || topPlayed.length > 0 || popularToShow.length > 0 || savedGames.length > 0;
 
-  // "Recently played" chevron opens the full library browser in place of the dashboard —
+  // "Top played" chevron opens the full library browser in place of the dashboard —
   // same screen, same tab bar, not a separate stack screen.
   const [libraryBrowsing, setLibraryBrowsing] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>('all');
   const [libraryShowAll, setLibraryShowAll] = useState(false);
   const [librarySortAZ, setLibrarySortAZ] = useState(false);
   const [libraryPromoDismissed, setLibraryPromoDismissed] = useState(false);
-
-  const allEntryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
-  const { games: allLibraryGames } = useResolvedGames(allEntryIds);
-
-  const libraryRows = useMemo(() => {
-    const byId = new Map(allLibraryGames.map((game) => [game.id, game]));
-    return entries
-      .map((entry) => ({ entry, game: byId.get(entry.catalogId) }))
-      .filter((row): row is { entry: (typeof entries)[number]; game: CatalogGame } => Boolean(row.game));
-  }, [entries, allLibraryGames]);
 
   const libraryFilteredRows = useMemo(() => {
     const filtered =
@@ -439,7 +454,10 @@ export function LibraryScreen({ navigation }: Props) {
           </View>
         ) : (
           <View style={styles.header}>
-            <Pressable hitSlop={12} onPress={browsingPopular ? () => setBrowsingPopular(false) : undefined}>
+            <Pressable
+              hitSlop={12}
+              onPress={browsingPopular ? () => setBrowsingPopular(false) : () => setSidebarVisible(true)}
+            >
               {browsingPopular ? (
                 <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
               ) : (
@@ -450,8 +468,10 @@ export function LibraryScreen({ navigation }: Props) {
                 </View>
               )}
             </Pressable>
-            <Text style={styles.brand}>{APP_NAME.toUpperCase()}</Text>
-            <Pressable hitSlop={12}>
+            <Image source={PRYSM_WORDMARK} style={styles.brandLogo} contentFit="contain" />
+            <Pressable hitSlop={12} style={styles.bellGlass}>
+              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={[StyleSheet.absoluteFill, styles.glassTint]} />
               <Image source={NAV_BELL_ICON} style={styles.bellIcon} contentFit="contain" />
             </Pressable>
           </View>
@@ -685,11 +705,17 @@ export function LibraryScreen({ navigation }: Props) {
               feedPosts.map((post) => (
                 <View key={post.id} style={styles.postCard}>
                   <View style={styles.postHeader}>
-                    <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
-                    <View style={styles.postHeaderText}>
-                      <Text style={styles.postName}>{post.display_name}</Text>
-                      <Text style={styles.postHandle}>@{post.handle}</Text>
-                    </View>
+                    <Pressable
+                      style={styles.postAuthorTapArea}
+                      onPress={() => navigation.navigate('FriendProfile', { handle: post.handle })}
+                      hitSlop={4}
+                    >
+                      <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
+                      <View style={styles.postHeaderText}>
+                        <Text style={styles.postName}>{post.display_name}</Text>
+                        <Text style={styles.postHandle}>@{post.handle}</Text>
+                      </View>
+                    </Pressable>
                     <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
                     {post.author_id === userId && (
                       <Pressable style={styles.postDeleteButton} onPress={() => handleDeletePost(post)} hitSlop={8}>
@@ -718,7 +744,11 @@ export function LibraryScreen({ navigation }: Props) {
                       />
                       {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
                     </Pressable>
-                    <Pressable style={styles.postActionButton} hitSlop={8}>
+                    <Pressable
+                      style={styles.postActionButton}
+                      hitSlop={8}
+                      onPress={() => setActiveCommentPostId(post.id)}
+                    >
                       <Ionicons name="chatbubble-outline" size={17} color={discoverColors.mutedText} />
                       {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
                     </Pressable>
@@ -734,10 +764,10 @@ export function LibraryScreen({ navigation }: Props) {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {(recentlyPlayed.length > 0 || recentlyPlayedLoading) && (
+            {(topPlayed.length > 0 || allLibraryLoading) && (
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Recently played</Text>
+                  <Text style={styles.sectionTitle}>Top played</Text>
                   <Pressable onPress={() => openLibraryBrowser('all', false)} hitSlop={8}>
                     <Image source={CHEVRON_ICON} style={styles.chevronIcon} contentFit="contain" />
                   </Pressable>
@@ -747,8 +777,8 @@ export function LibraryScreen({ navigation }: Props) {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.hRow}
                 >
-                  {recentlyPlayed.length > 0
-                    ? recentlyPlayed.map(renderExploreCard)
+                  {topPlayed.length > 0
+                    ? topPlayed.map(renderExploreCard)
                     : [0, 1, 2].map(renderExploreCardSkeleton)}
                 </ScrollView>
               </View>
@@ -839,6 +869,34 @@ export function LibraryScreen({ navigation }: Props) {
         locations={discoverColors.bottomFadeLocations}
         style={styles.bottomFade}
       />
+
+      <Sidebar
+        visible={sidebarVisible}
+        onClose={() => setSidebarVisible(false)}
+        activeTab={tab}
+        onSelectGames={() => {
+          setTab('games');
+          setSidebarVisible(false);
+        }}
+        onSelectFriends={() => {
+          setTab('friends');
+          setSidebarVisible(false);
+        }}
+        onOpenProfile={() => {
+          setSidebarVisible(false);
+          navigation.navigate('ProfileTab');
+        }}
+        displayName={myDisplayName}
+        avatarColor={myAvatarColor}
+      />
+
+      <CommentsSheet
+        visible={activeCommentPostId !== null}
+        postId={activeCommentPostId}
+        userId={userId ?? null}
+        onClose={() => setActiveCommentPostId(null)}
+        onCommentAdded={handleCommentAdded}
+      />
     </View>
   );
 }
@@ -898,11 +956,22 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#FFFFFF',
   },
-  brand: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
-    letterSpacing: 0.4,
+  bellGlass: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  glassTint: {
+    backgroundColor: discoverColors.navBg,
+  },
+  brandLogo: {
+    width: 60,
+    height: 16,
   },
   bellIcon: {
     width: 28,
@@ -1247,6 +1316,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  postAuthorTapArea: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

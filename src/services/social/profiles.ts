@@ -51,6 +51,16 @@ export async function fetchMyAvatarColor(userId: string): Promise<CoverColorKey 
   return (data?.avatar_color as CoverColorKey | undefined) ?? null;
 }
 
+export async function fetchMyDisplayName(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.display_name ?? null;
+}
+
 /** Whether this account is counted in /games/popular-with-friends for people who follow them. Defaults to true. */
 export async function fetchMyShareActivity(userId: string): Promise<boolean> {
   const { data, error } = await supabase

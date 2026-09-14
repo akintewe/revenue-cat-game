@@ -3,6 +3,7 @@ import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
 import { SplashScreen } from '../../shared/components/SplashScreen';
@@ -11,6 +12,8 @@ import { GameDetailScreen } from '../../features/library/screens/GameDetailScree
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
+import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
+import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
@@ -62,6 +65,34 @@ export function RootNavigator() {
     resetShareIntent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasShareIntent, status]);
+
+  useEffect(() => {
+    if (status !== 'signedIn') return;
+
+    function handleUrl(url: string) {
+      if (!url.includes('link/steam')) return;
+      try {
+        const { queryParams } = Linking.parse(url);
+        const linkStatus = queryParams?.status;
+        const nonce = queryParams?.nonce;
+        if (
+          (linkStatus === 'ok' || linkStatus === 'failed' || linkStatus === 'expired') &&
+          typeof nonce === 'string' &&
+          navigationRef.isReady()
+        ) {
+          navigationRef.navigate('SteamLink', { status: linkStatus, nonce });
+        }
+      } catch (err) {
+        console.warn('[steam-link] failed to parse redirect url', err);
+      }
+    }
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => subscription.remove();
+  }, [status]);
 
   useEffect(() => {
     initialize();
@@ -117,6 +148,16 @@ export function RootNavigator() {
               name="ShareConfirm"
               component={ShareConfirmScreen}
               options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="SteamLink"
+              component={SteamLinkScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="FriendProfile"
+              component={FriendProfileScreen}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Paywall"

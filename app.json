@@ -56,7 +56,8 @@
           }
         }
       ],
-      "expo-share-intent"
+      "expo-share-intent",
+      "expo-web-browser"
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

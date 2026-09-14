@@ -88,3 +88,47 @@ export async function addComment(postId: string, authorId: string, body: string)
   const { error } = await supabase.from('post_comments').insert({ post_id: postId, author_id: authorId, body });
   if (error) throw error;
 }
+
+export type PostComment = {
+  id: string;
+  post_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  handle: string;
+  display_name: string;
+  avatar_color: CoverColorKey;
+};
+
+/**
+ * post_comments has no direct PostgREST-embeddable relationship to profiles, so this
+ * fetches comments then resolves their authors' profiles in a second query and merges —
+ * same info shelf_feed already joins server-side for posts, just not for comments yet.
+ */
+export async function fetchComments(postId: string): Promise<PostComment[]> {
+  const { data: comments, error } = await supabase
+    .from('post_comments')
+    .select('id, post_id, author_id, body, created_at')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  if (!comments || comments.length === 0) return [];
+
+  const authorIds = Array.from(new Set(comments.map((c) => c.author_id)));
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('user_id, handle, display_name, avatar_color')
+    .in('user_id', authorIds);
+  if (profilesError) throw profilesError;
+
+  const byId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+  return comments.map((c) => {
+    const profile = byId.get(c.author_id);
+    return {
+      ...c,
+      handle: profile?.handle ?? 'unknown',
+      display_name: profile?.display_name ?? 'Unknown',
+      avatar_color: (profile?.avatar_color as CoverColorKey) ?? 'slate',
+    };
+  });
+}

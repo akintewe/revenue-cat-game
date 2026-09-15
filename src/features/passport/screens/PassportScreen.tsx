@@ -1,13 +1,16 @@
 import React, { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../../shared/components/Screen';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { useLibraryStore } from '../../library/store/useLibraryStore';
 import { computeStamps } from '../logic/stamps';
 import type { Stamp } from '../types';
+import type { RootScreenProps } from '../../../core/navigation/types';
 
-export function PassportScreen() {
+type Props = RootScreenProps<'Passport'>;
+
+export function PassportScreen({ navigation }: Props) {
   const entries = useLibraryStore((state) => state.entries);
   const stamps = useMemo(() => computeStamps(entries), [entries]);
   const earnedCount = stamps.filter((stamp) => stamp.earned).length;
@@ -25,15 +28,17 @@ export function PassportScreen() {
         numColumns={2}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <StampCard stamp={item} />}
+        renderItem={({ item }) => (
+          <StampCard stamp={item} onPress={() => navigation.navigate('AchievementDetail', { stamp: item })} />
+        )}
       />
     </Screen>
   );
 }
 
-function StampCard({ stamp }: { stamp: Stamp }) {
+function StampCard({ stamp, onPress }: { stamp: Stamp; onPress: () => void }) {
   return (
-    <View style={[styles.card, !stamp.earned && styles.cardLocked]}>
+    <Pressable style={[styles.card, !stamp.earned && styles.cardLocked]} onPress={onPress}>
       <View style={[styles.iconWrap, stamp.earned && styles.iconWrapEarned]}>
         <Ionicons
           name={stamp.icon}
@@ -52,7 +57,7 @@ function StampCard({ stamp }: { stamp: Stamp }) {
           {stamp.progress}/{stamp.target}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 

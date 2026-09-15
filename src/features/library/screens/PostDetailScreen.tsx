@@ -16,6 +16,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
 import { GameCover } from '../../../shared/components/GameCover';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { timeAgo } from '../../../shared/utils/formatDate';
 import {
   addComment,
@@ -167,6 +168,7 @@ export function PostDetailScreen({ route, navigation }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={insets.top}
     >
+      <ScreenBackground />
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />

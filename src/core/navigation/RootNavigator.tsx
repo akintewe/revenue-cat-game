@@ -11,6 +11,7 @@ import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
+import { AchievementDetailScreen } from '../../features/passport/screens/AchievementDetailScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
 import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
 import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
@@ -115,9 +116,12 @@ export function RootNavigator() {
           console.warn('[profiles] ensureProfile failed', err),
         );
       }
+      // identifyOneSignalUser(session.user.id) — re-enable alongside initOneSignal()
+      // in App.tsx once a build with the OneSignal native module is out.
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
       useWishlistStore.getState().reset();
+      // clearOneSignalUser() — same as above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -204,6 +208,11 @@ export function RootNavigator() {
               name="Passport"
               component={PassportScreen}
               options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
+            />
+            <Stack.Screen
+              name="AchievementDetail"
+              component={AchievementDetailScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
             />
           </Stack.Group>
         )}

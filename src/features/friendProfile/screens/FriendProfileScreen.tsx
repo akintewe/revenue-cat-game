@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { EmptyState } from '../../../shared/components/EmptyState';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { fetchProfileStats, followUser, unfollowUser, type ProfileStats } from '../../../services/social/profiles';
 import { blockUser, reportContent } from '../../../services/social/moderation';
 import { fetchFeed, type FeedPost } from '../../../services/social/feed';
@@ -120,6 +121,7 @@ export function FriendProfileScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.root, styles.centered]}>
+        <ScreenBackground />
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -128,6 +130,7 @@ export function FriendProfileScreen({ route, navigation }: Props) {
   if (notFound || !stats) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
+        <ScreenBackground />
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
@@ -138,6 +141,7 @@ export function FriendProfileScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScreenBackground />
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />

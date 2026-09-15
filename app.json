@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nathanakin.revenuecatgame",
+      "appleTeamId": "96CJG9LV69",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -57,7 +58,13 @@
         }
       ],
       "expo-share-intent",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ]
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

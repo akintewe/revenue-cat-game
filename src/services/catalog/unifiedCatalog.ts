@@ -2,6 +2,7 @@ import { findCatalogGame, searchCatalog, type CatalogGame } from '../../data/cat
 import { isUuid } from '../../shared/utils/id';
 import {
   fetchRemotePopularGames,
+  fetchRemoteRecentlyViewed,
   getRemoteCatalogGame,
   searchRemoteCatalog,
   type SearchFilters,
@@ -29,21 +30,39 @@ export async function resolveRemoteId(title: string): Promise<string | null> {
 /**
  * Resolves a catalogId to a game, checking the small local demo catalog first
  * (instant, no network) and falling back to the live backend for real IGDB ids.
+ *
+ * Pass `track: true` only when this resolution IS the user opening a game's detail
+ * screen — it records a view server-side. A cached result is skipped in that case so
+ * the tracked request always actually reaches the server, even for a game whose
+ * metadata was already resolved untracked (e.g. from a list row) earlier.
  */
-export async function resolveCatalogGame(id: string): Promise<CatalogGame | undefined> {
+export async function resolveCatalogGame(id: string, options?: { track?: boolean }): Promise<CatalogGame | undefined> {
   const local = findCatalogGame(id);
   if (local) return local;
 
-  if (remoteCache.has(id)) return remoteCache.get(id);
+  const track = options?.track ?? false;
+  if (!track && remoteCache.has(id)) return remoteCache.get(id);
 
   try {
-    const remote = await getRemoteCatalogGame(id);
+    const remote = await getRemoteCatalogGame(id, { track });
     if (!remote) return undefined;
     const normalized = normalizeRemoteGame(remote);
     remoteCache.set(id, normalized);
     return normalized;
   } catch {
     return undefined;
+  }
+}
+
+/** The server-tracked recently-viewed rail — newest first, populated only by real detail-screen opens. */
+export async function fetchRecentlyViewed(limit: number, offset = 0): Promise<CatalogGame[]> {
+  try {
+    const remote = await fetchRemoteRecentlyViewed(limit, offset);
+    const normalized = remote.map(normalizeRemoteGame);
+    normalized.forEach((game) => remoteCache.set(game.id, game));
+    return normalized;
+  } catch {
+    return [];
   }
 }
 

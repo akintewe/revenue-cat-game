@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { deleteAccount } from '../../../services/auth/accountDeletion';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
@@ -34,6 +35,7 @@ export function DeleteAccountScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
+      <ScreenBackground />
       <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
         <Ionicons name="chevron-back" size={22} color={colors.text} />
       </Pressable>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -11,12 +11,12 @@ import { PlatformIcon } from '../../../shared/components/PlatformIcon';
 import { SegmentedTabs } from '../../../shared/components/SegmentedTabs';
 import { RatingScale } from '../../../shared/components/RatingScale';
 import { LabeledInput } from '../../../shared/components/LabeledInput';
+import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, coverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { findCatalogGame, type CatalogGame } from '../../../data/catalog';
 import { resolveCatalogGame } from '../../../services/catalog/unifiedCatalog';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
-import { useRecentlyViewedStore } from '../../addGame/store/useRecentlyViewedStore';
 import { GAME_STATUSES, STATUS_LABEL } from '../types';
 import { STATUS_ICON } from '../../../shared/types/status';
 import type { RootScreenProps } from '../../../core/navigation/types';
@@ -41,7 +41,7 @@ export function GameDetailScreen({ route, navigation }: Props) {
     if (game) return;
     let cancelled = false;
     setLoading(true);
-    resolveCatalogGame(catalogId).then((resolved) => {
+    resolveCatalogGame(catalogId, { track: true }).then((resolved) => {
       if (cancelled) return;
       setGame(resolved);
       setLoading(false);
@@ -60,22 +60,27 @@ export function GameDetailScreen({ route, navigation }: Props) {
 
   const isWishlisted = useWishlistStore((state) => state.isWishlisted(catalogId));
   const addToWishlist = useWishlistStore((state) => state.addGame);
-  const recordView = useRecentlyViewedStore((state) => state.recordView);
 
   const [hoursDraft, setHoursDraft] = useState(entry?.hoursPlayed?.toString() ?? '');
 
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentTranslateY = useRef(new Animated.Value(16)).current;
+
   useEffect(() => {
-    if (game) recordView(catalogId);
-  }, [catalogId, game, recordView]);
+    if (!game) return;
+    Animated.parallel([
+      Animated.timing(contentOpacity, { toValue: 1, duration: 320, useNativeDriver: true }),
+      Animated.timing(contentTranslateY, { toValue: 0, duration: 320, useNativeDriver: true }),
+    ]).start();
+  }, [game, contentOpacity, contentTranslateY]);
 
   if (!game) {
+    if (loading) {
+      return <GameDetailSkeleton insets={insets} onBack={() => navigation.goBack()} />;
+    }
     return (
       <View style={[styles.root, styles.centered]}>
-        {loading ? (
-          <ActivityIndicator color={colors.accent} />
-        ) : (
-          <Text style={typography.subheading}>Game not found</Text>
-        )}
+        <Text style={typography.subheading}>Game not found</Text>
       </View>
     );
   }
@@ -101,6 +106,7 @@ export function GameDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }}>
         <View style={[styles.hero, { backgroundColor: coverBackground }]}>
           {game.coverImageUrl && (
             <Image
@@ -248,7 +254,54 @@ export function GameDetailScreen({ route, navigation }: Props) {
           </View>
           )}
         </View>
+        </Animated.View>
       </ScrollView>
+    </View>
+  );
+}
+
+/** Shimmer placeholder shaped like the real layout — a spinner on black reads as broken, this reads as loading. */
+function GameDetailSkeleton({ insets, onBack }: { insets: { top: number }; onBack: () => void }) {
+  return (
+    <View style={styles.root}>
+      <View style={[styles.hero, styles.skeletonHero]}>
+        <View style={[styles.heroTopRow, { paddingTop: insets.top + spacing.sm }]}>
+          <Pressable style={styles.heroIconButton} onPress={onBack} hitSlop={10}>
+            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            <Ionicons name="chevron-back" size={20} color={colors.text} />
+          </Pressable>
+          <View style={styles.heroIconButton} />
+        </View>
+        <View style={styles.heroPosterWrap}>
+          <Shimmer style={styles.skeletonPoster} />
+        </View>
+      </View>
+
+      <View style={styles.content}>
+        <View style={styles.titleBlock}>
+          <Shimmer style={styles.skeletonTitle} />
+          <Shimmer style={styles.skeletonMeta} />
+          <View style={styles.statRow}>
+            <Shimmer style={styles.skeletonChip} />
+            <Shimmer style={styles.skeletonChip} />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Shimmer style={styles.skeletonSectionLabel} />
+          <Shimmer style={styles.skeletonSegmented} />
+        </View>
+
+        <View style={styles.section}>
+          <Shimmer style={styles.skeletonSectionLabel} />
+          <Shimmer style={styles.skeletonRow} />
+        </View>
+
+        <View style={styles.section}>
+          <Shimmer style={styles.skeletonSectionLabel} />
+          <Shimmer style={styles.skeletonBlock} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -373,5 +426,49 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '700',
     fontSize: 13,
+  },
+  skeletonHero: {
+    backgroundColor: colors.surface,
+  },
+  skeletonPoster: {
+    width: 132,
+    height: 132,
+    borderRadius: radii.lg,
+  },
+  skeletonTitle: {
+    width: '70%',
+    height: 24,
+    borderRadius: radii.sm,
+  },
+  skeletonMeta: {
+    width: '45%',
+    height: 14,
+    borderRadius: radii.sm,
+    marginTop: spacing.xs,
+  },
+  skeletonChip: {
+    width: 72,
+    height: 26,
+    borderRadius: radii.pill,
+  },
+  skeletonSectionLabel: {
+    width: 110,
+    height: 12,
+    borderRadius: radii.sm,
+  },
+  skeletonSegmented: {
+    width: '100%',
+    height: 40,
+    borderRadius: radii.pill,
+  },
+  skeletonRow: {
+    width: '100%',
+    height: 44,
+    borderRadius: radii.md,
+  },
+  skeletonBlock: {
+    width: '100%',
+    height: 80,
+    borderRadius: radii.md,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -19,18 +19,23 @@ import { Image, type ImageSource } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { GameCover } from '../../../shared/components/GameCover';
 import { PlatformIcon } from '../../../shared/components/PlatformIcon';
 import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
 import type { CatalogGame } from '../../../data/catalog';
-import { fetchPopularSuggestions, resolveRemoteId, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
+import {
+  fetchPopularSuggestions,
+  fetchRecentlyViewed,
+  resolveRemoteId,
+  searchAllCatalog,
+} from '../../../services/catalog/unifiedCatalog';
 import { fetchGenrePills, type SearchDevice, type SearchFilters, type SearchSort } from '../../../services/catalog/remoteCatalog';
 import { isUuid } from '../../../shared/utils/id';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
-import { useRecentlyViewedStore } from '../store/useRecentlyViewedStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
@@ -41,6 +46,8 @@ type IconName = React.ComponentProps<typeof IoniconsType>['name'];
 const SEARCH_DEBOUNCE_MS = 350;
 const POPULAR_PREVIEW_LIMIT = 10;
 const POPULAR_BROWSE_LIMIT = 24;
+const RECENT_PREVIEW_LIMIT = 10;
+const RECENT_BROWSE_LIMIT = 24;
 
 type SortOption = 'popular' | 'ratings' | 'recent' | 'alphabetical';
 type SortDirection = 'asc' | 'desc';
@@ -118,6 +125,10 @@ export function AddGameScreen({ navigation }: Props) {
   const [browsePopular, setBrowsePopular] = useState<CatalogGame[]>([]);
   const [browsePopularLoading, setBrowsePopularLoading] = useState(false);
 
+  const [recentPreview, setRecentPreview] = useState<CatalogGame[]>([]);
+  const [browseRecent, setBrowseRecent] = useState<CatalogGame[]>([]);
+  const [browseRecentLoading, setBrowseRecentLoading] = useState(false);
+
   const [genreExpanded, setGenreExpanded] = useState(true);
   const [deviceExpanded, setDeviceExpanded] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
@@ -149,8 +160,13 @@ export function AddGameScreen({ navigation }: Props) {
   const libraryIds = useMemo(() => new Set(entries.map((entry) => entry.catalogId)), [entries]);
   const libraryIdsKey = Array.from(libraryIds).join(',');
 
-  const recentlyViewedIds = useRecentlyViewedStore((state) => state.catalogIds);
-  const { games: recentGames } = useResolvedGames(recentlyViewedIds);
+  // Refetches on every focus (not just mount) so the rail reflects a game just opened
+  // from here, without needing the user to fully back out and reopen this screen.
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecentlyViewed(RECENT_PREVIEW_LIMIT).then(setRecentPreview);
+    }, []),
+  );
 
   const wishlistEntries = useWishlistStore((state) => state.entries);
   const wishlistIds = useMemo(() => wishlistEntries.map((entry) => entry.catalogId), [wishlistEntries]);
@@ -226,6 +242,13 @@ export function AddGameScreen({ navigation }: Props) {
         setBrowsePopularLoading(false);
       });
     }
+    if (section === 'recent' && browseRecent.length === 0) {
+      setBrowseRecentLoading(true);
+      fetchRecentlyViewed(RECENT_BROWSE_LIMIT).then((games) => {
+        setBrowseRecent(games);
+        setBrowseRecentLoading(false);
+      });
+    }
   }
 
   async function handleAdd(game: CatalogGame) {
@@ -286,7 +309,7 @@ export function AddGameScreen({ navigation }: Props) {
 
   const browseData =
     browseSection === 'recent'
-      ? recentGames
+      ? browseRecent
       : browseSection === 'popular'
         ? browsePopular
         : browseSection === 'saved'
@@ -294,7 +317,8 @@ export function AddGameScreen({ navigation }: Props) {
           : browseSection === 'library'
             ? myLibraryGames
             : [];
-  const browseLoading = browseSection === 'popular' && browsePopularLoading;
+  const browseLoading =
+    (browseSection === 'popular' && browsePopularLoading) || (browseSection === 'recent' && browseRecentLoading);
   const browseTitle =
     browseSection === 'recent'
       ? 'Recently Viewed'
@@ -325,7 +349,7 @@ export function AddGameScreen({ navigation }: Props) {
       <>
         <VerticalSection
           title="Recently Viewed"
-          data={recentGames}
+          data={recentPreview}
           onSeeAll={() => openBrowseSection('recent')}
           onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
         />

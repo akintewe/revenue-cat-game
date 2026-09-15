@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import {
   finishSteamLink,
   importSteamLibrary,
@@ -70,6 +71,7 @@ export function SteamLinkScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}>
+      <ScreenBackground />
       {(stage === 'connecting' || stage === 'importing') && (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.accent} size="large" />

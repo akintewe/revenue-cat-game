@@ -25,6 +25,7 @@ type Props = {
   onSelectGames: () => void;
   onSelectFriends: () => void;
   onOpenProfile: () => void;
+  onOpenAchievements: () => void;
   displayName: string | null;
   avatarColor: CoverColorKey | null;
 };
@@ -40,6 +41,7 @@ export function Sidebar({
   onSelectGames,
   onSelectFriends,
   onOpenProfile,
+  onOpenAchievements,
   displayName,
   avatarColor,
 }: Props) {
@@ -71,7 +73,7 @@ export function Sidebar({
     { key: 'games', label: 'Games', icon: 'game-controller-outline', onPress: onSelectGames },
     { key: 'friends', label: 'Friends', icon: 'people-outline', onPress: onSelectFriends },
     { key: 'events', label: 'Events', icon: 'calendar-outline', onPress: () => comingSoon('Events') },
-    { key: 'achievements', label: 'Achievements', icon: 'ribbon-outline', onPress: () => comingSoon('Achievements') },
+    { key: 'achievements', label: 'Achievements', icon: 'ribbon-outline', onPress: onOpenAchievements },
     { key: 'support', label: 'Support', icon: 'help-circle-outline', onPress: () => comingSoon('Support') },
   ];
 

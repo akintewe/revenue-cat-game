@@ -2,6 +2,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { FeedPost } from '../../services/social/feed';
+import type { Stamp } from '../../features/passport/types';
 
 export type TabParamList = {
   LibraryTab: { openBrowse?: boolean } | undefined;
@@ -15,6 +16,7 @@ export type RootStackParamList = {
   GameDetail: { catalogId: string };
   Paywall: undefined;
   Passport: undefined;
+  AchievementDetail: { stamp: Stamp };
   ShareConfirm: { url: string };
   SteamLink: { status: 'ok' | 'failed' | 'expired'; nonce: string };
   FriendProfile: { handle: string };

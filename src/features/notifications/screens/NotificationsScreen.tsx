@@ -5,8 +5,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { EmptyState } from '../../../shared/components/EmptyState';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { timeAgo } from '../../../shared/utils/formatDate';
 import { fetchNotifications, markNotificationsRead, type ShelfNotification } from '../../../services/social/notifications';
+import { findPostById } from '../../../services/social/feed';
+import { fetchMyProfile } from '../../../services/social/profiles';
+import { useAuthStore } from '../../auth/store/useAuthStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 type Props = RootScreenProps<'Notifications'>;
@@ -37,8 +41,11 @@ function iconFor(kind: ShelfNotification['kind']): keyof typeof Ionicons.glyphMa
 
 export function NotificationsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const userId = useAuthStore((state) => state.session?.user.id);
   const [items, setItems] = useState<ShelfNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myHandle, setMyHandle] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,8 +69,32 @@ export function NotificationsScreen({ navigation }: Props) {
     markNotificationsRead().catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    if (!userId) return;
+    fetchMyProfile(userId)
+      .then((profile) => setMyHandle(profile?.handle ?? null))
+      .catch(() => undefined);
+  }, [userId]);
+
+  async function handlePressItem(item: ShelfNotification) {
+    if (openingId) return;
+    const isPostNotification = item.kind === 'post_like' || item.kind === 'post_comment';
+    if (isPostNotification && item.post_id && myHandle) {
+      setOpeningId(item.id);
+      const post = await findPostById(myHandle, item.post_id).catch(() => null);
+      setOpeningId(null);
+      if (post) {
+        navigation.navigate('PostDetail', { post });
+        return;
+      }
+    }
+    // Follows, and a post that couldn't be found (e.g. since deleted), fall back to the profile.
+    navigation.navigate('FriendProfile', { handle: item.handle });
+  }
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScreenBackground />
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -85,7 +116,8 @@ export function NotificationsScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <Pressable
               style={[styles.row, !item.read_at && styles.rowUnread]}
-              onPress={() => navigation.navigate('FriendProfile', { handle: item.handle })}
+              onPress={() => handlePressItem(item)}
+              disabled={openingId === item.id}
             >
               <View style={[styles.avatar, { backgroundColor: coverColors[item.avatar_color] ?? coverColors.slate }]}>
                 <View style={styles.avatarBadge}>
@@ -98,7 +130,11 @@ export function NotificationsScreen({ navigation }: Props) {
                 </Text>
                 <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
               </View>
-              {!item.read_at && <View style={styles.unreadDot} />}
+              {openingId === item.id ? (
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              ) : (
+                !item.read_at && <View style={styles.unreadDot} />
+              )}
             </Pressable>
           )}
         />

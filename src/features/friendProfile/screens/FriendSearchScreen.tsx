@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { EmptyState } from '../../../shared/components/EmptyState';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { followUser, searchUsers, unfollowUser, type ProfileSummary } from '../../../services/social/profiles';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
@@ -72,6 +73,7 @@ export function FriendSearchScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScreenBackground />
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />

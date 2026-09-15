@@ -5,6 +5,7 @@ import { Button } from '../../../shared/components/Button';
 import { LabeledInput } from '../../../shared/components/LabeledInput';
 import { SocialSignInButtons } from '../components/SocialSignInButtons';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { APP_NAME } from '../../../shared/constants/app';
 import { useAuthStore } from '../store/useAuthStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
@@ -41,6 +42,7 @@ export function SignupScreen({ navigation }: Props) {
   if (confirmationSent) {
     return (
       <SafeAreaView style={styles.container}>
+        <ScreenBackground />
         <View style={styles.content}>
           <Text style={typography.heading}>Check your email</Text>
           <Text style={styles.subtitle}>
@@ -58,6 +60,7 @@ export function SignupScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScreenBackground />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -50,12 +50,32 @@ export async function fetchGenrePills(): Promise<string[]> {
   return Array.from(new Set((data ?? []).map((row) => row.pill as string)));
 }
 
-export async function getRemoteCatalogGame(id: string): Promise<RemoteCatalogGame | null> {
-  const { data, error } = await supabase.functions.invoke<RemoteCatalogGame>(`games/${id}`, {
+/**
+ * `track` records this as a view in the user's recently-viewed history (the server does this
+ * automatically unless told not to). Pass `track: true` only from a real detail-screen open —
+ * every other caller (resolving a row for a list, a wishlist entry, a feed game chip) must leave
+ * it off, or the recently-viewed rail fills with games nobody actually opened.
+ */
+export async function getRemoteCatalogGame(
+  id: string,
+  options?: { track?: boolean },
+): Promise<RemoteCatalogGame | null> {
+  const query = options?.track ? '' : '?track=0';
+  const { data, error } = await supabase.functions.invoke<RemoteCatalogGame>(`games/${id}${query}`, {
     method: 'GET',
   });
   if (error) throw error;
   return data ?? null;
+}
+
+/** Server-tracked view history — newest first. Populated by real (tracked) game-detail opens only. */
+export async function fetchRemoteRecentlyViewed(limit: number, offset = 0): Promise<RemoteCatalogGame[]> {
+  const { data, error } = await supabase.functions.invoke<RemoteCatalogGame[]>(
+    `games/recently-viewed?limit=${limit}&offset=${offset}`,
+    { method: 'GET' },
+  );
+  if (error) throw error;
+  return data ?? [];
 }
 
 /** Real trending games — ordered by IGDB rating-count, most-rated first. Paginated; not infinite. */

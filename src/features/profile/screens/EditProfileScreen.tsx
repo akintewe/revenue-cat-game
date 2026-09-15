@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { fetchMyProfile, updateMyProfile, ProfileUpdateError, type MyProfile } from '../../../services/social/profiles';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import type { CoverColorKey } from '../../../data/catalog';
@@ -78,6 +79,7 @@ export function EditProfileScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={[styles.root, styles.centered, { paddingTop: insets.top }]}>
+        <ScreenBackground />
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -85,6 +87,7 @@ export function EditProfileScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScreenBackground />
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />

@@ -973,6 +973,10 @@ export function LibraryScreen({ navigation, route }: Props) {
           setSidebarVisible(false);
           navigation.navigate('ProfileTab');
         }}
+        onOpenAchievements={() => {
+          setSidebarVisible(false);
+          navigation.navigate('Passport');
+        }}
         displayName={myDisplayName}
         avatarColor={myAvatarColor}
       />

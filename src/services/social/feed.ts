@@ -36,6 +36,28 @@ export async function fetchFeed(params?: {
   return data ?? [];
 }
 
+/**
+ * There's no direct "fetch one post by id" endpoint yet, so this pages through an
+ * author's own feed looking for it. Only reliable for the signed-in user's own recent
+ * posts — which is the only case this is used for: a post_like/post_comment
+ * notification is always about a post the signed-in user wrote. Flagged to backend as
+ * a real gap worth closing (a `shelf_post(p_post_id)` RPC) rather than paging forever.
+ */
+export async function findPostById(handle: string, postId: string, maxPages = 4): Promise<FeedPost | null> {
+  let before: string | undefined;
+  let beforeId: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const posts = await fetchFeed({ handle, limit: 50, before, beforeId });
+    const found = posts.find((post) => post.id === postId);
+    if (found) return found;
+    if (posts.length < 50) return null;
+    const last = posts[posts.length - 1];
+    before = last.created_at;
+    beforeId = last.id;
+  }
+  return null;
+}
+
 export async function createPost(
   authorId: string,
   body: string,

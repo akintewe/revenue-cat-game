@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, type ImageSource } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,6 +24,7 @@ import {
   SteamProfilePrivateError,
   type PlatformAccount,
 } from '../../../services/social/steam';
+import { scanAndImportAndroidGames } from '../../../services/social/android';
 import type { TabScreenProps } from '../../../core/navigation/types';
 
 const STEAM_CONNECT_BUTTON = require('../../../../assets/figma-icons/steam-connect-button.png') as ImageSource;
@@ -40,6 +41,7 @@ export function ProfileScreen({ navigation }: Props) {
   const [shareActivity, setShareActivityState] = useState(true);
   const [steamAccount, setSteamAccount] = useState<PlatformAccount | null>(null);
   const [steamBusy, setSteamBusy] = useState(false);
+  const [androidScanBusy, setAndroidScanBusy] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -117,6 +119,24 @@ export function ProfileScreen({ navigation }: Props) {
         },
       ],
     );
+  }
+
+  async function handleScanAndroid() {
+    setAndroidScanBusy(true);
+    try {
+      const result = await scanAndImportAndroidGames();
+      await useLibraryStore.getState().hydrate();
+      Alert.alert(
+        'Scan complete',
+        result.matched > 0
+          ? `Found ${result.matched.toLocaleString()} game${result.matched === 1 ? '' : 's'} on this device and added them to your shelf.`
+          : "Didn't find any games from our catalog installed on this device.",
+      );
+    } catch (err) {
+      Alert.alert('Could not scan', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setAndroidScanBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -230,6 +250,22 @@ export function ProfileScreen({ navigation }: Props) {
           </Pressable>
         )}
       </View>
+
+      {Platform.OS === 'android' && (
+        <View style={styles.linkRow}>
+          <View style={styles.toggleLabelGroup}>
+            <Text style={typography.subheading}>Installed games</Text>
+            <Text style={styles.toggleHint}>Scan this device and add anything from our catalog you already have.</Text>
+          </View>
+          {androidScanBusy ? (
+            <ActivityIndicator color={colors.textMuted} />
+          ) : (
+            <Pressable onPress={handleScanAndroid} hitSlop={8}>
+              <Ionicons name="scan-outline" size={20} color={colors.accent} />
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <View style={styles.linkRow}>
         <View style={styles.toggleLabelGroup}>

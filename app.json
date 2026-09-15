@@ -64,7 +64,8 @@
         {
           "mode": "production"
         }
-      ]
+      ],
+      "./plugins/withAndroidPackageQueries.js"
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

@@ -189,6 +189,11 @@ export function ProfileScreen({ navigation }: Props) {
         )}
       </View>
 
+      <Pressable style={styles.linkRow} onPress={() => navigation.navigate('EditProfile')}>
+        <Text style={typography.subheading}>Edit profile</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      </Pressable>
+
       <Pressable style={styles.linkRow} onPress={() => navigation.navigate('Passport')}>
         <Text style={typography.subheading}>Passport</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -257,6 +262,11 @@ export function ProfileScreen({ navigation }: Props) {
       >
         <Text style={[typography.subheading, styles.logoutLabel]}>Log out</Text>
         <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+      </Pressable>
+
+      <Pressable style={styles.linkRow} onPress={() => navigation.navigate('DeleteAccount')}>
+        <Text style={[typography.subheading, styles.logoutLabel]}>Delete account</Text>
+        <Ionicons name="trash-outline" size={18} color={colors.danger} />
       </Pressable>
     </Screen>
   );

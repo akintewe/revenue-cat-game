@@ -4,6 +4,7 @@ import {
   fetchRemotePopularGames,
   getRemoteCatalogGame,
   searchRemoteCatalog,
+  type SearchFilters,
 } from './remoteCatalog';
 import { normalizeRemoteGame } from './normalize';
 
@@ -52,16 +53,21 @@ export type CatalogSearchResult = {
   remoteError: string | null;
 };
 
-/** Searches the local demo catalog (instant) and the live 89k-game backend, merged and deduped. */
-export async function searchAllCatalog(query: string): Promise<CatalogSearchResult> {
-  const localResults = searchCatalog(query);
+/**
+ * Searches the local demo catalog (instant) and the live 89k-game backend, merged and deduped.
+ * Any filter active hands the query entirely to the backend — the tiny local catalog has no way
+ * to honor genre/device/date filters, so it would just show unfiltered noise alongside real results.
+ */
+export async function searchAllCatalog(query: string, filters?: SearchFilters): Promise<CatalogSearchResult> {
+  const hasFilters = Boolean(filters && Object.keys(filters).length > 0);
+  const localResults = hasFilters ? [] : searchCatalog(query);
 
   if (!query.trim()) {
     return { games: localResults, remoteError: null };
   }
 
   try {
-    const remoteResults = await searchRemoteCatalog(query);
+    const remoteResults = await searchRemoteCatalog(query, filters);
     const normalized = remoteResults.map(normalizeRemoteGame);
     normalized.forEach((game) => remoteCache.set(game.id, game));
     const localIds = new Set(localResults.map((game) => game.id));

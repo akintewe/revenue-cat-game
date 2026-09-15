@@ -14,6 +14,12 @@ import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
 import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
 import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
+import { PostDetailScreen } from '../../features/library/screens/PostDetailScreen';
+import { FollowListScreen } from '../../features/friendProfile/screens/FollowListScreen';
+import { FriendSearchScreen } from '../../features/friendProfile/screens/FriendSearchScreen';
+import { NotificationsScreen } from '../../features/notifications/screens/NotificationsScreen';
+import { EditProfileScreen } from '../../features/profile/screens/EditProfileScreen';
+import { DeleteAccountScreen } from '../../features/profile/screens/DeleteAccountScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
@@ -158,6 +164,36 @@ export function RootNavigator() {
               name="FriendProfile"
               component={FriendProfileScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="PostDetail"
+              component={PostDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FollowList"
+              component={FollowListScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FriendSearch"
+              component={FriendSearchScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="DeleteAccount"
+              component={DeleteAccountScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
             />
             <Stack.Screen
               name="Paywall"

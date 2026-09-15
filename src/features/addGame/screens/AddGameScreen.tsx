@@ -25,6 +25,7 @@ import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
 import type { CatalogGame } from '../../../data/catalog';
 import { fetchPopularSuggestions, resolveRemoteId, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
+import { fetchGenrePills, type SearchDevice, type SearchFilters, type SearchSort } from '../../../services/catalog/remoteCatalog';
 import { isUuid } from '../../../shared/utils/id';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
@@ -46,29 +47,33 @@ type SortDirection = 'asc' | 'desc';
 type BrowseSection = 'recent' | 'popular' | 'saved' | 'library' | null;
 type Panel = 'none' | 'category' | 'sort';
 
-const GENRE_FILTERS: { label: string; icon: IconName; keywords: string[] }[] = [
-  { label: 'Action', icon: 'flash-outline', keywords: ['action'] },
-  { label: 'Adventure', icon: 'compass-outline', keywords: ['adventure'] },
-  { label: 'RPG', icon: 'shield-outline', keywords: ['role-playing', 'rpg'] },
-  { label: 'FPS', icon: 'locate-outline', keywords: ['shooter'] },
-  { label: 'Strategy', icon: 'grid-outline', keywords: ['strategy'] },
-  { label: 'Simulation', icon: 'sync-outline', keywords: ['simulat'] },
-  { label: 'Sports', icon: 'football-outline', keywords: ['sport'] },
-  { label: 'Racing', icon: 'car-sport-outline', keywords: ['racing'] },
-  { label: 'Fighting', icon: 'hand-left-outline', keywords: ['fighting'] },
-  { label: 'Platformer', icon: 'walk-outline', keywords: ['platform'] },
-  { label: 'Puzzle', icon: 'extension-puzzle-outline', keywords: ['puzzle'] },
-  { label: 'Souls', icon: 'skull-outline', keywords: ['souls'] },
-  { label: 'Open World', icon: 'globe-outline', keywords: ['open world'] },
-  { label: 'Survival', icon: 'leaf-outline', keywords: ['survival'] },
-];
+/** Icon per genre_pills slug — a generic fallback covers any pill added server-side later. */
+const GENRE_ICONS: Record<string, IconName> = {
+  adventure: 'compass-outline',
+  rpg: 'shield-outline',
+  fps: 'locate-outline',
+  strategy: 'grid-outline',
+  simulation: 'sync-outline',
+  sports: 'football-outline',
+  racing: 'car-sport-outline',
+  fighting: 'hand-left-outline',
+  platformer: 'walk-outline',
+  puzzle: 'extension-puzzle-outline',
+};
+const GENRE_FALLBACK_ICON: IconName = 'pricetag-outline';
 
-const DEVICE_FILTERS: { label: string; icon: IconName; keywords: string[] }[] = [
-  { label: 'Play Station', icon: 'logo-playstation', keywords: ['ps', 'playstation'] },
-  { label: 'Xbox', icon: 'logo-xbox', keywords: ['xbox'] },
-  { label: 'Nintendo', icon: 'game-controller-outline', keywords: ['switch', 'nintendo'] },
-  { label: 'PC', icon: 'desktop-outline', keywords: ['pc', 'windows', 'win'] },
-  { label: 'Mobile', icon: 'phone-portrait-outline', keywords: ['ios', 'android', 'mobile'] },
+function genrePillLabel(slug: string): string {
+  if (slug === 'rpg' || slug === 'fps') return slug.toUpperCase();
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
+/** The only 5 values /search's device param accepts — an unknown one is a 400, so this list is fixed. */
+const DEVICE_FILTERS: { label: string; value: SearchDevice; icon: IconName }[] = [
+  { label: 'PlayStation', value: 'playstation', icon: 'logo-playstation' },
+  { label: 'Xbox', value: 'xbox', icon: 'logo-xbox' },
+  { label: 'Nintendo', value: 'nintendo', icon: 'game-controller-outline' },
+  { label: 'PC', value: 'pc', icon: 'desktop-outline' },
+  { label: 'Mobile', value: 'mobile', icon: 'phone-portrait-outline' },
 ];
 
 const SORT_OPTIONS: { value: SortOption; label: string; icon: IconName }[] = [
@@ -78,14 +83,12 @@ const SORT_OPTIONS: { value: SortOption; label: string; icon: IconName }[] = [
   { value: 'alphabetical', label: 'Alphabetical Order', icon: 'swap-vertical-outline' },
 ];
 
-function matchesAny(value: string, labels: Set<string>, filters: { label: string; keywords: string[] }[]) {
-  if (labels.size === 0) return true;
-  const normalized = value.toLowerCase();
-  return Array.from(labels).some((label) => {
-    const filter = filters.find((f) => f.label === label);
-    return filter?.keywords.some((keyword) => normalized.includes(keyword));
-  });
-}
+const SORT_PARAM: Record<SortOption, SearchSort> = {
+  popular: 'popular',
+  ratings: 'rating',
+  recent: 'recent',
+  alphabetical: 'alpha',
+};
 
 function formatMonthYear(releaseDate?: string, year?: number): string {
   if (releaseDate) {
@@ -117,10 +120,28 @@ export function AddGameScreen({ navigation }: Props) {
 
   const [genreExpanded, setGenreExpanded] = useState(true);
   const [deviceExpanded, setDeviceExpanded] = useState(false);
-  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
-  const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedDevice, setSelectedDevice] = useState<SearchDevice | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>('popular');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [genrePills, setGenrePills] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchGenrePills()
+      .then(setGenrePills)
+      .catch(() => undefined);
+  }, []);
+
+  const searchFilters: SearchFilters = useMemo(
+    () => ({
+      genre: selectedGenre ?? undefined,
+      device: selectedDevice ?? undefined,
+      sort: SORT_PARAM[sortOption],
+      sortDir: sortOption === 'alphabetical' ? sortDirection : undefined,
+    }),
+    [selectedGenre, selectedDevice, sortOption, sortDirection],
+  );
+  const searchFiltersKey = `${selectedGenre ?? ''}|${selectedDevice ?? ''}|${sortOption}|${sortDirection}`;
 
   const entries = useLibraryStore((state) => state.entries);
   const isInLibrary = useLibraryStore((state) => state.isInLibrary);
@@ -153,7 +174,7 @@ export function AddGameScreen({ navigation }: Props) {
     setSearching(true);
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchAllCatalog(trimmed).then(({ games, remoteError }) => {
+      searchAllCatalog(trimmed, searchFilters).then(({ games, remoteError }) => {
         if (cancelled) return;
         setResults(games);
         setSearchError(remoteError);
@@ -164,7 +185,8 @@ export function AddGameScreen({ navigation }: Props) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, searchFiltersKey]);
 
   useEffect(() => {
     if (!searchActive || query.length > 0) {
@@ -222,25 +244,44 @@ export function AddGameScreen({ navigation }: Props) {
     addGame(catalogId);
   }
 
-  function applyFiltersAndSort(list: CatalogGame[]): CatalogGame[] {
-    const filtered = list.filter(
-      (game) => matchesAny(game.genre, selectedGenres, GENRE_FILTERS) && matchesAny(game.platform, selectedDevices, DEVICE_FILTERS),
-    );
+  function sortOnly(list: CatalogGame[]): CatalogGame[] {
     switch (sortOption) {
       case 'ratings':
-        return [...filtered].sort((a, b) => (b.criticScore ?? -1) - (a.criticScore ?? -1));
+        return [...list].sort((a, b) => (b.criticScore ?? -1) - (a.criticScore ?? -1));
       case 'recent':
-        return [...filtered].sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
+        return [...list].sort((a, b) => (b.releaseDate ?? '').localeCompare(a.releaseDate ?? ''));
       case 'alphabetical':
-        return [...filtered].sort((a, b) =>
+        return [...list].sort((a, b) =>
           sortDirection === 'asc' ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title),
         );
       default:
-        return filtered;
+        return list;
     }
   }
 
-  const activeFilterCount = selectedGenres.size + selectedDevices.size;
+  /**
+   * Browse-mode lists (popular/library/saved/recent) aren't /search results, so the real
+   * genre/device params don't apply to them — this is a light local narrowing of an already-small,
+   * already-fetched list, not a substitute for server-side filtering.
+   */
+  function applyFiltersAndSort(list: CatalogGame[]): CatalogGame[] {
+    const genreAliases = selectedGenre === 'fps' ? ['shooter', 'fps'] : selectedGenre === 'rpg' ? ['rpg', 'role-playing'] : selectedGenre ? [selectedGenre] : null;
+    const deviceAliases: Record<SearchDevice, string[]> = {
+      playstation: ['playstation', 'ps'],
+      xbox: ['xbox'],
+      nintendo: ['nintendo', 'switch'],
+      pc: ['pc', 'windows', 'mac', 'linux'],
+      mobile: ['ios', 'android', 'mobile'],
+    };
+    const filtered = list.filter((game) => {
+      const genreOk = !genreAliases || genreAliases.some((alias) => game.genre.toLowerCase().includes(alias));
+      const deviceOk = !selectedDevice || deviceAliases[selectedDevice].some((alias) => game.platform.toLowerCase().includes(alias));
+      return genreOk && deviceOk;
+    });
+    return sortOnly(filtered);
+  }
+
+  const activeFilterCount = (selectedGenre ? 1 : 0) + (selectedDevice ? 1 : 0);
   const trimmedQuery = query.trim();
 
   const browseData =
@@ -263,7 +304,8 @@ export function AddGameScreen({ navigation }: Props) {
           ? 'Explore Saved'
           : 'Explore your Library';
 
-  const sortedResults = applyFiltersAndSort(results);
+  // /search already applied genre/device/sort server-side when any were active — no client re-filtering.
+  const sortedResults = results;
   const bestMatch = browseSection === null ? sortedResults.slice(0, 3) : [];
   const fromLibraryMatches =
     browseSection === null && trimmedQuery
@@ -444,22 +486,11 @@ export function AddGameScreen({ navigation }: Props) {
             onToggleGenreExpanded={() => setGenreExpanded((v) => !v)}
             deviceExpanded={deviceExpanded}
             onToggleDeviceExpanded={() => setDeviceExpanded((v) => !v)}
-            selectedGenres={selectedGenres}
-            onToggleGenre={(label) =>
-              setSelectedGenres((prev) => {
-                const next = new Set(prev);
-                next.has(label) ? next.delete(label) : next.add(label);
-                return next;
-              })
-            }
-            selectedDevices={selectedDevices}
-            onToggleDevice={(label) =>
-              setSelectedDevices((prev) => {
-                const next = new Set(prev);
-                next.has(label) ? next.delete(label) : next.add(label);
-                return next;
-              })
-            }
+            genrePills={genrePills}
+            selectedGenre={selectedGenre}
+            onSelectGenre={(slug) => setSelectedGenre((prev) => (prev === slug ? null : slug))}
+            selectedDevice={selectedDevice}
+            onSelectDevice={(value) => setSelectedDevice((prev) => (prev === value ? null : value))}
             onClose={() => setPanel('none')}
             onOpenSort={() => setPanel('sort')}
             onApply={() => setPanel('none')}
@@ -696,10 +727,11 @@ type CategoryPanelProps = {
   onToggleGenreExpanded: () => void;
   deviceExpanded: boolean;
   onToggleDeviceExpanded: () => void;
-  selectedGenres: Set<string>;
-  onToggleGenre: (label: string) => void;
-  selectedDevices: Set<string>;
-  onToggleDevice: (label: string) => void;
+  genrePills: string[];
+  selectedGenre: string | null;
+  onSelectGenre: (slug: string) => void;
+  selectedDevice: SearchDevice | null;
+  onSelectDevice: (value: SearchDevice) => void;
   onClose: () => void;
   onOpenSort: () => void;
   onApply: () => void;
@@ -710,10 +742,11 @@ function CategoryPanel({
   onToggleGenreExpanded,
   deviceExpanded,
   onToggleDeviceExpanded,
-  selectedGenres,
-  onToggleGenre,
-  selectedDevices,
-  onToggleDevice,
+  genrePills,
+  selectedGenre,
+  onSelectGenre,
+  selectedDevice,
+  onSelectDevice,
   onClose,
   onOpenSort,
   onApply,
@@ -734,16 +767,20 @@ function CategoryPanel({
         </Pressable>
         {genreExpanded && (
           <View style={styles.pillWrap}>
-            {GENRE_FILTERS.map((filter) => {
-              const active = selectedGenres.has(filter.label);
+            {genrePills.map((slug) => {
+              const active = selectedGenre === slug;
               return (
                 <Pressable
-                  key={filter.label}
+                  key={slug}
                   style={[styles.filterChip, active && styles.filterChipActive]}
-                  onPress={() => onToggleGenre(filter.label)}
+                  onPress={() => onSelectGenre(slug)}
                 >
-                  <Ionicons name={filter.icon} size={13} color={active ? colors.background : discoverColors.mutedText} />
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{filter.label}</Text>
+                  <Ionicons
+                    name={GENRE_ICONS[slug] ?? GENRE_FALLBACK_ICON}
+                    size={13}
+                    color={active ? colors.background : discoverColors.mutedText}
+                  />
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{genrePillLabel(slug)}</Text>
                 </Pressable>
               );
             })}
@@ -757,12 +794,12 @@ function CategoryPanel({
         {deviceExpanded && (
           <View style={styles.pillWrap}>
             {DEVICE_FILTERS.map((filter) => {
-              const active = selectedDevices.has(filter.label);
+              const active = selectedDevice === filter.value;
               return (
                 <Pressable
-                  key={filter.label}
+                  key={filter.value}
                   style={[styles.filterChip, active && styles.filterChipActive]}
-                  onPress={() => onToggleDevice(filter.label)}
+                  onPress={() => onSelectDevice(filter.value)}
                 >
                   <Ionicons name={filter.icon} size={13} color={active ? colors.background : discoverColors.mutedText} />
                   <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{filter.label}</Text>

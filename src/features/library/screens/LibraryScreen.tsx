@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -33,9 +34,10 @@ import {
   uploadPostImage,
   type FeedPost,
 } from '../../../services/social/feed';
-import { CommentsSheet } from '../components/CommentsSheet';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import { fetchMyAvatarColor, fetchMyDisplayName } from '../../../services/social/profiles';
+import { fetchUnreadNotificationCount } from '../../../services/social/notifications';
+import { blockUser, reportContent } from '../../../services/social/moderation';
 import type { CoverColorKey } from '../../../data/catalog';
 import type { TabScreenProps } from '../../../core/navigation/types';
 import { Sidebar } from '../../../core/navigation/Sidebar';
@@ -45,6 +47,7 @@ const GRID_POPULAR_LIMIT = 15;
 
 const NAV_BELL_ICON = require('../../../../assets/figma-icons/nav-bell.png') as ImageSource;
 const PRYSM_WORDMARK = require('../../../../assets/figma-icons/prysm-wordmark.png') as ImageSource;
+const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
 const CHEVRON_ICON = require('../../../../assets/figma-icons/chevron-forward.png') as ImageSource;
 
@@ -84,6 +87,21 @@ export function LibraryScreen({ navigation, route }: Props) {
   const [myAvatarColor, setMyAvatarColor] = useState<CoverColorKey | null>(null);
   const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      fetchUnreadNotificationCount()
+        .then((count) => {
+          if (!cancelled) setUnreadCount(count);
+        })
+        .catch(() => undefined);
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     if (route.params?.openBrowse) {
@@ -93,15 +111,17 @@ export function LibraryScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.openBrowse]);
 
-  useEffect(() => {
-    if (!userId) return;
-    fetchMyAvatarColor(userId)
-      .then(setMyAvatarColor)
-      .catch(() => undefined);
-    fetchMyDisplayName(userId)
-      .then(setMyDisplayName)
-      .catch(() => undefined);
-  }, [userId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      fetchMyAvatarColor(userId)
+        .then(setMyAvatarColor)
+        .catch(() => undefined);
+      fetchMyDisplayName(userId)
+        .then(setMyDisplayName)
+        .catch(() => undefined);
+    }, [userId]),
+  );
 
   // Tapping the already-active Library tab icon backs out of any in-place browsing
   // mode (popular grid, library browser) instead of doing nothing.
@@ -118,7 +138,6 @@ export function LibraryScreen({ navigation, route }: Props) {
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [composerImage, setComposerImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [posting, setPosting] = useState(false);
@@ -181,8 +200,47 @@ export function LibraryScreen({ navigation, route }: Props) {
     ]);
   }
 
-  function handleCommentAdded(postId: string) {
-    setFeedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comment_count: p.comment_count + 1 } : p)));
+  function handleReportPost(post: FeedPost) {
+    if (!userId) return;
+    Alert.alert(`@${post.handle}`, undefined, [
+      {
+        text: 'Block this account',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Block this account?', 'You will no longer see each other on Prysm.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => {
+                blockUser(userId, post.author_id)
+                  .then(() => setFeedPosts((prev) => prev.filter((p) => p.author_id !== post.author_id)))
+                  .catch((err) => console.warn('[moderation] blockUser failed', err));
+              },
+            },
+          ]);
+        },
+      },
+      {
+        text: 'Report post',
+        onPress: () => {
+          const reasonButtons: NonNullable<Parameters<typeof Alert.alert>[2]> = [
+            ...REPORT_REASONS.map((reason) => ({
+              text: reason,
+              onPress: () => {
+                reportContent(userId, 'post', post.id, reason).catch((err) =>
+                  console.warn('[moderation] reportContent failed', err),
+                );
+                Alert.alert('Reported', "Thanks — we've received your report.");
+              },
+            })),
+            { text: 'Cancel', style: 'cancel' as const },
+          ];
+          Alert.alert('Report this post', 'What best describes the issue?', reasonButtons);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   async function handlePickComposerImage() {
@@ -469,10 +527,13 @@ export function LibraryScreen({ navigation, route }: Props) {
               )}
             </Pressable>
             <Image source={PRYSM_WORDMARK} style={styles.brandLogo} contentFit="contain" />
-            <Pressable hitSlop={12} style={styles.bellGlass}>
-              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-              <View style={[StyleSheet.absoluteFill, styles.glassTint]} />
-              <Image source={NAV_BELL_ICON} style={styles.bellIcon} contentFit="contain" />
+            <Pressable hitSlop={12} style={styles.bellGlassWrap} onPress={() => navigation.navigate('Notifications')}>
+              <View style={styles.bellGlass}>
+                <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.glassTint]} />
+                <Image source={NAV_BELL_ICON} style={styles.bellIcon} contentFit="contain" />
+              </View>
+              {unreadCount > 0 && <View style={styles.unreadDot} />}
             </Pressable>
           </View>
         )}
@@ -645,6 +706,10 @@ export function LibraryScreen({ navigation, route }: Props) {
           </ScrollView>
         ) : tab === 'friends' ? (
           <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
+            <Pressable style={styles.findPeopleRow} onPress={() => navigation.navigate('FriendSearch')}>
+              <Ionicons name="search" size={16} color={discoverColors.mutedText} />
+              <Text style={styles.findPeopleText}>Find people to follow</Text>
+            </Pressable>
             <View style={styles.composer}>
               <View style={styles.composerRow}>
                 <TextInput
@@ -703,7 +768,18 @@ export function LibraryScreen({ navigation, route }: Props) {
               </View>
             ) : (
               feedPosts.map((post) => (
-                <View key={post.id} style={styles.postCard}>
+                <Pressable
+                  key={post.id}
+                  style={styles.postCard}
+                  onPress={() =>
+                    navigation.navigate('PostDetail', {
+                      post,
+                      onPostUpdated: (updated) =>
+                        setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+                      onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
+                    })
+                  }
+                >
                   <View style={styles.postHeader}>
                     <Pressable
                       style={styles.postAuthorTapArea}
@@ -717,9 +793,13 @@ export function LibraryScreen({ navigation, route }: Props) {
                       </View>
                     </Pressable>
                     <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
-                    {post.author_id === userId && (
+                    {post.author_id === userId ? (
                       <Pressable style={styles.postDeleteButton} onPress={() => handleDeletePost(post)} hitSlop={8}>
                         <Ionicons name="trash-outline" size={16} color={discoverColors.mutedText} />
+                      </Pressable>
+                    ) : (
+                      <Pressable style={styles.postDeleteButton} onPress={() => handleReportPost(post)} hitSlop={8}>
+                        <Ionicons name="ellipsis-horizontal" size={16} color={discoverColors.mutedText} />
                       </Pressable>
                     )}
                   </View>
@@ -747,13 +827,20 @@ export function LibraryScreen({ navigation, route }: Props) {
                     <Pressable
                       style={styles.postActionButton}
                       hitSlop={8}
-                      onPress={() => setActiveCommentPostId(post.id)}
+                      onPress={() =>
+                        navigation.navigate('PostDetail', {
+                          post,
+                          onPostUpdated: (updated) =>
+                            setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+                          onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
+                        })
+                      }
                     >
                       <Ionicons name="chatbubble-outline" size={17} color={discoverColors.mutedText} />
                       {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
                     </Pressable>
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
           </ScrollView>
@@ -889,14 +976,6 @@ export function LibraryScreen({ navigation, route }: Props) {
         displayName={myDisplayName}
         avatarColor={myAvatarColor}
       />
-
-      <CommentsSheet
-        visible={activeCommentPostId !== null}
-        postId={activeCommentPostId}
-        userId={userId ?? null}
-        onClose={() => setActiveCommentPostId(null)}
-        onCommentAdded={handleCommentAdded}
-      />
     </View>
   );
 }
@@ -956,6 +1035,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#FFFFFF',
   },
+  bellGlassWrap: {
+    width: 40,
+    height: 40,
+  },
   bellGlass: {
     width: 40,
     height: 40,
@@ -965,6 +1048,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: discoverColors.background,
   },
   glassTint: {
     backgroundColor: discoverColors.navBg,
@@ -1397,6 +1491,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  findPeopleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  findPeopleText: {
+    color: discoverColors.mutedText,
+    fontSize: 14,
+    fontWeight: '600',
   },
   composer: {
     gap: spacing.sm,

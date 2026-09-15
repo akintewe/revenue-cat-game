@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { fetchProfileStats, followUser, unfollowUser, type ProfileStats } from '../../../services/social/profiles';
+import { blockUser, reportContent } from '../../../services/social/moderation';
 import { fetchFeed, type FeedPost } from '../../../services/social/feed';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import { timeAgo } from '../../../shared/utils/formatDate';
 import type { RootScreenProps } from '../../../core/navigation/types';
+
+const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 
 type Props = RootScreenProps<'FriendProfile'>;
 
@@ -70,6 +73,50 @@ export function FriendProfileScreen({ route, navigation }: Props) {
     }
   }
 
+  function handleReport() {
+    if (!stats || !userId) return;
+    const reasonButtons: NonNullable<Parameters<typeof Alert.alert>[2]> = [
+      ...REPORT_REASONS.map((reason) => ({
+        text: reason,
+        onPress: () => {
+          reportContent(userId, 'profile', stats.user_id, reason).catch(() => undefined);
+          Alert.alert('Reported', "Thanks — we've received your report.");
+        },
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ];
+    Alert.alert('Report this account', 'What best describes the issue?', reasonButtons);
+  }
+
+  function handleMoreOptions() {
+    if (!stats || !userId) return;
+    Alert.alert(`@${stats.handle}`, undefined, [
+      {
+        text: 'Block this account',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Block this account?', 'You will no longer see each other on Prysm.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await blockUser(userId, stats.user_id);
+                  navigation.goBack();
+                } catch (err) {
+                  Alert.alert('Could not block', err instanceof Error ? err.message : 'Please try again.');
+                }
+              },
+            },
+          ]);
+        },
+      },
+      { text: 'Report', onPress: handleReport },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   if (loading) {
     return (
       <View style={[styles.root, styles.centered]}>
@@ -95,6 +142,11 @@ export function FriendProfileScreen({ route, navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
+        {!stats.is_me && (
+          <Pressable onPress={handleMoreOptions} hitSlop={12}>
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+          </Pressable>
+        )}
       </View>
 
       <FlatList
@@ -113,14 +165,20 @@ export function FriendProfileScreen({ route, navigation }: Props) {
                 <Text style={styles.statNumber}>{stats.post_count}</Text>
                 <Text style={styles.statLabel}>Posts</Text>
               </View>
-              <View style={styles.statItem}>
+              <Pressable
+                style={styles.statItem}
+                onPress={() => navigation.push('FollowList', { handle: stats.handle, mode: 'followers' })}
+              >
                 <Text style={styles.statNumber}>{stats.followers}</Text>
                 <Text style={styles.statLabel}>Followers</Text>
-              </View>
-              <View style={styles.statItem}>
+              </Pressable>
+              <Pressable
+                style={styles.statItem}
+                onPress={() => navigation.push('FollowList', { handle: stats.handle, mode: 'following' })}
+              >
                 <Text style={styles.statNumber}>{stats.following}</Text>
                 <Text style={styles.statLabel}>Following</Text>
-              </View>
+              </Pressable>
             </View>
 
             {!stats.is_me && (
@@ -139,10 +197,20 @@ export function FriendProfileScreen({ route, navigation }: Props) {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.postCard}>
+          <Pressable
+            style={styles.postCard}
+            onPress={() =>
+              navigation.navigate('PostDetail', {
+                post: item,
+                onPostUpdated: (updated) =>
+                  setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+                onPostDeleted: (postId) => setPosts((prev) => prev.filter((p) => p.id !== postId)),
+              })
+            }
+          >
             <Text style={styles.postTime}>{timeAgo(item.created_at)}</Text>
             <Text style={styles.postBody}>{item.body}</Text>
-          </View>
+          </Pressable>
         )}
         ListEmptyComponent={
           postsLoading ? (
@@ -166,6 +234,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
   },

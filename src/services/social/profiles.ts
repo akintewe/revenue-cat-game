@@ -77,6 +77,40 @@ export async function setShareActivity(userId: string, enabled: boolean): Promis
   if (error) throw error;
 }
 
+export type MyProfile = {
+  handle: string;
+  display_name: string;
+  bio: string;
+  avatar_color: CoverColorKey;
+};
+
+export async function fetchMyProfile(userId: string): Promise<MyProfile | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('handle, display_name, bio, avatar_color')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export class ProfileUpdateError extends Error {
+  constructor(public field: 'handle' | 'other', message: string) {
+    super(message);
+  }
+}
+
+export async function updateMyProfile(
+  userId: string,
+  patch: Partial<Pick<MyProfile, 'handle' | 'display_name' | 'bio' | 'avatar_color'>>,
+): Promise<void> {
+  const { error } = await supabase.from('profiles').update(patch).eq('user_id', userId);
+  if (!error) return;
+  if (error.code === '23505') throw new ProfileUpdateError('handle', 'That handle is already taken.');
+  if (error.code === '23514') throw new ProfileUpdateError('handle', 'Handle must be 3-20 characters: lowercase letters, numbers, and underscores only.');
+  throw new ProfileUpdateError('other', error.message);
+}
+
 export type ProfileStats = {
   user_id: string;
   handle: string;
@@ -108,4 +142,58 @@ export async function unfollowUser(userId: string, targetUserId: string): Promis
     .eq('follower_id', userId)
     .eq('followee_id', targetUserId);
   if (error) throw error;
+}
+
+export type ProfileSummary = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  avatar_color: CoverColorKey;
+  bio: string;
+  followed_by_me: boolean;
+  is_me: boolean;
+};
+
+export type FollowListRow = ProfileSummary & {
+  /** Pagination cursor for the two list RPCs — when the follow happened. */
+  followed_at: string;
+};
+
+/** Prefix search over handle/display name. Under 2 characters returns nothing, same floor as /search. */
+export async function searchUsers(query: string, maxResults = 20): Promise<ProfileSummary[]> {
+  const { data, error } = await supabase.rpc('shelf_search_users', { q: query, max_results: maxResults });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchFollowers(params: {
+  handle: string;
+  limit?: number;
+  before?: string;
+  beforeId?: string;
+}): Promise<FollowListRow[]> {
+  const { data, error } = await supabase.rpc('shelf_followers', {
+    p_handle: params.handle,
+    p_limit: params.limit ?? 20,
+    p_before: params.before ?? null,
+    p_before_id: params.beforeId ?? null,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchFollowing(params: {
+  handle: string;
+  limit?: number;
+  before?: string;
+  beforeId?: string;
+}): Promise<FollowListRow[]> {
+  const { data, error } = await supabase.rpc('shelf_following', {
+    p_handle: params.handle,
+    p_limit: params.limit ?? 20,
+    p_before: params.before ?? null,
+    p_before_id: params.beforeId ?? null,
+  });
+  if (error) throw error;
+  return data ?? [];
 }

@@ -51,6 +51,25 @@ export async function fetchMyAvatarColor(userId: string): Promise<CoverColorKey 
   return (data?.avatar_color as CoverColorKey | undefined) ?? null;
 }
 
+export type MyProfileSummary = {
+  displayName: string | null;
+  avatarColor: CoverColorKey | null;
+};
+
+/** Display name and avatar colour for the side menu's user row. */
+export async function fetchMyProfileSummary(userId: string): Promise<MyProfileSummary> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('display_name, avatar_color')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    displayName: (data?.display_name as string | undefined) ?? null,
+    avatarColor: (data?.avatar_color as CoverColorKey | undefined) ?? null,
+  };
+}
+
 /** Whether this account is counted in /games/popular-with-friends for people who follow them. Defaults to true. */
 export async function fetchMyShareActivity(userId: string): Promise<boolean> {
   const { data, error } = await supabase

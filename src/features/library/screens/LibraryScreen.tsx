@@ -1,8 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  FlatList,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, type ImageSource } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,10 +26,11 @@ import { SegmentedTabs } from '../../../shared/components/SegmentedTabs';
 import { PlatformIcon } from '../../../shared/components/PlatformIcon';
 import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, coverColors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
-import { APP_NAME } from '../../../shared/constants/app';
+import { TopBar } from '../../../shared/components/TopBar';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
 import { useRecentlyViewedStore } from '../../addGame/store/useRecentlyViewedStore';
+import { useSideMenuStore } from '../../menu/store/useSideMenuStore';
 import { CATALOG, type CatalogGame } from '../../../data/catalog';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { fetchPopularSuggestions, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
@@ -42,7 +55,6 @@ import type { TabScreenProps } from '../../../core/navigation/types';
 const GRID_SEARCH_DEBOUNCE_MS = 350;
 const GRID_POPULAR_LIMIT = 15;
 
-const NAV_BELL_ICON = require('../../../../assets/figma-icons/nav-bell.png') as ImageSource;
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
 const CHEVRON_ICON = require('../../../../assets/figma-icons/chevron-forward.png') as ImageSource;
 
@@ -70,8 +82,107 @@ const LIBRARY_RECENT_LIMIT = 5;
 const NAV_CLEARANCE = 40;
 const EXPLORE_POPULAR_LIMIT = 3;
 const EXPLORE_SAVED_LIMIT = 6;
+/** Figma 64 ÷ 1.1 — the mock frame is 1.1× device points. */
+const POPULAR_COVER_SIZE = 58;
+/** Side gutter of the home dashboard (header, Games content, Friends feed). */
+const HOME_PADDING_X = 13;
 
 type DashboardTab = 'games' | 'friends';
+
+const DASHBOARD_TABS: { key: DashboardTab; label: string }[] = [
+  { key: 'games', label: 'Games' },
+  { key: 'friends', label: 'Friends' },
+];
+
+const glassAvailable = Platform.OS === 'ios' && isLiquidGlassAvailable();
+const TOGGLE_HEIGHT = 34;
+const TOGGLE_SEGMENT_WIDTH = 92;
+const TOGGLE_TRACK_PADDING = 3;
+const TOGGLE_TRACK_HEIGHT = TOGGLE_HEIGHT + TOGGLE_TRACK_PADDING * 2;
+
+/**
+ * The Games / Friends switch. The selected pill springs between equal-width segments and the
+ * label colours crossfade with it, all on the native driver. On iOS 26 the track is one
+ * interactive Liquid Glass capsule, like the system segmented control. Older iOS and Android
+ * keep the blur fallback.
+ */
+function DashboardToggle({ value, onChange }: { value: DashboardTab; onChange: (tab: DashboardTab) => void }) {
+  const selectedIndex = Math.max(
+    0,
+    DASHBOARD_TABS.findIndex((tab) => tab.key === value),
+  );
+  const position = useRef(new Animated.Value(selectedIndex)).current;
+
+  useEffect(() => {
+    Animated.spring(position, {
+      toValue: selectedIndex,
+      useNativeDriver: true,
+      stiffness: 320,
+      damping: 28,
+      mass: 1,
+    }).start();
+  }, [position, selectedIndex]);
+
+  const content = (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toggleIndicator,
+          { transform: [{ translateX: Animated.multiply(position, TOGGLE_SEGMENT_WIDTH) }] },
+        ]}
+      >
+        {glassAvailable ? (
+          <View style={[StyleSheet.absoluteFill, styles.toggleIndicatorGlassFill]} />
+        ) : (
+          <>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, styles.togglePillTint]} />
+          </>
+        )}
+      </Animated.View>
+      {DASHBOARD_TABS.map(({ key, label }, index) => {
+        const activeOpacity = position.interpolate({
+          inputRange: [index - 1, index, index + 1],
+          outputRange: [0, 1, 0],
+          extrapolate: 'clamp',
+        });
+        return (
+          <Pressable key={key} onPress={() => onChange(key)} style={styles.toggleSegment}>
+            <Text style={styles.toggleLabel}>{label}</Text>
+            <Animated.Text
+              style={[styles.toggleLabel, styles.toggleLabelActive, styles.toggleLabelOverlay, { opacity: activeOpacity }]}
+            >
+              {label}
+            </Animated.Text>
+          </Pressable>
+        );
+      })}
+    </>
+  );
+
+  if (glassAvailable) {
+    return (
+      <GlassView
+        style={styles.toggleGlassTrack}
+        glassEffectStyle="regular"
+        colorScheme="dark"
+        isInteractive
+        tintColor={discoverColors.navBg}
+      >
+        {content}
+      </GlassView>
+    );
+  }
+
+  return (
+    <View style={styles.toggleOuter}>
+      <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, styles.toggleOuterTint]} />
+      {content}
+    </View>
+  );
+}
 
 function timeAgo(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -87,8 +198,17 @@ function timeAgo(iso: string): string {
 
 type Props = TabScreenProps<'LibraryTab'>;
 
-export function LibraryScreen({ navigation }: Props) {
+export function LibraryScreen({ navigation, route }: Props) {
   const [tab, setTab] = useState<DashboardTab>('games');
+  const showSideMenu = useSideMenuStore((state) => state.show);
+  const requestedTab = route.params?.tab;
+
+  // The side menu picks Games / Friends through the route param. Consume it once.
+  useEffect(() => {
+    if (!requestedTab) return;
+    setTab(requestedTab);
+    navigation.setParams({ tab: undefined });
+  }, [navigation, requestedTab]);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [myAvatarColor, setMyAvatarColor] = useState<CoverColorKey | null>(null);
 
@@ -439,21 +559,12 @@ export function LibraryScreen({ navigation }: Props) {
           </View>
         ) : (
           <View style={styles.header}>
-            <Pressable hitSlop={12} onPress={browsingPopular ? () => setBrowsingPopular(false) : undefined}>
-              {browsingPopular ? (
-                <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-              ) : (
-                <View style={styles.hamburger}>
-                  <View style={styles.hamburgerLine} />
-                  <View style={styles.hamburgerLine} />
-                  <View style={styles.hamburgerLine} />
-                </View>
-              )}
-            </Pressable>
-            <Text style={styles.brand}>{APP_NAME.toUpperCase()}</Text>
-            <Pressable hitSlop={12}>
-              <Image source={NAV_BELL_ICON} style={styles.bellIcon} contentFit="contain" />
-            </Pressable>
+            <TopBar
+              leading={browsingPopular ? 'back' : 'menu'}
+              onLeadingPress={browsingPopular ? () => setBrowsingPopular(false) : showSideMenu}
+              title={browsingPopular ? 'Explore popular' : undefined}
+              actions={[{ icon: 'bell', accessibilityLabel: 'Notifications' }]}
+            />
           </View>
         )}
 
@@ -474,28 +585,7 @@ export function LibraryScreen({ navigation }: Props) {
             <SegmentedTabs options={libraryFilterOptions} value={libraryFilter} onChange={handleLibraryFilterChange} />
           </View>
         ) : (
-          <View style={styles.toggleOuter}>
-            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, styles.toggleOuterTint]} />
-            <Pressable onPress={() => setTab('games')} style={styles.togglePill}>
-              {tab === 'games' && (
-                <>
-                  <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                  <View style={[StyleSheet.absoluteFill, styles.togglePillTint]} />
-                </>
-              )}
-              <Text style={[styles.toggleLabel, tab === 'games' && styles.toggleLabelActive]}>Games</Text>
-            </Pressable>
-            <Pressable onPress={() => setTab('friends')} style={styles.togglePill}>
-              {tab === 'friends' && (
-                <>
-                  <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                  <View style={[StyleSheet.absoluteFill, styles.togglePillTint]} />
-                </>
-              )}
-              <Text style={[styles.toggleLabel, tab === 'friends' && styles.toggleLabelActive]}>Friends</Text>
-            </Pressable>
-          </View>
+          <DashboardToggle value={tab} onChange={setTab} />
         )}
 
         {browsingPopular ? (
@@ -774,7 +864,7 @@ export function LibraryScreen({ navigation }: Props) {
                             abbreviation={game.abbreviation}
                             colorKey={game.colorKey}
                             imageUrl={game.coverImageUrl}
-                            size={64}
+                            size={POPULAR_COVER_SIZE}
                             style={styles.popularCover}
                           />
                           <View style={styles.popularInfo}>
@@ -787,8 +877,20 @@ export function LibraryScreen({ navigation }: Props) {
                             </View>
                           </View>
                           <Pressable style={styles.addPill} onPress={() => addGame(game.id)}>
-                            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                            <View style={[StyleSheet.absoluteFill, styles.togglePillTint]} />
+                            {glassAvailable ? (
+                              <GlassView
+                                style={[StyleSheet.absoluteFill, styles.addPillGlass]}
+                                glassEffectStyle="regular"
+                                colorScheme="dark"
+                                isInteractive
+                                tintColor={discoverColors.pillBg}
+                              />
+                            ) : (
+                              <>
+                                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                                <View style={[StyleSheet.absoluteFill, styles.addPillTint]} />
+                              </>
+                            )}
                             <Image source={ADD_CIRCLE_ICON} style={styles.addIcon} contentFit="contain" />
                             <Text style={styles.addLabel}>Add</Text>
                           </Pressable>
@@ -859,10 +961,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: HOME_PADDING_X,
     paddingTop: spacing.sm,
   },
   libraryHeader: {
@@ -887,37 +986,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hamburger: {
-    width: 21,
-    height: 16,
-    justifyContent: 'space-between',
-  },
-  hamburgerLine: {
-    width: 21,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
-  },
-  brand: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
-    letterSpacing: 0.4,
-  },
-  bellIcon: {
-    width: 28,
-    height: 28,
-  },
   toggleOuter: {
     flexDirection: 'row',
     alignSelf: 'center',
     marginTop: spacing.lg,
     marginBottom: spacing.lg,
+    height: TOGGLE_TRACK_HEIGHT,
+    padding: TOGGLE_TRACK_PADDING,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
-    padding: 2,
+  },
+  // Glass path. No overflow clip on the track, so the interactive press scale is not cut off.
+  toggleGlassTrack: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    height: TOGGLE_TRACK_HEIGHT,
+    padding: TOGGLE_TRACK_PADDING,
+    // An explicit half-height radius. UICornerRadius does not clamp radii.pill (999).
+    borderRadius: TOGGLE_TRACK_HEIGHT / 2,
+  },
+  toggleSegment: {
+    width: TOGGLE_SEGMENT_WIDTH,
+    height: TOGGLE_HEIGHT,
+    justifyContent: 'center',
+  },
+  toggleIndicator: {
+    position: 'absolute',
+    left: TOGGLE_TRACK_PADDING,
+    top: TOGGLE_TRACK_PADDING,
+    width: TOGGLE_SEGMENT_WIDTH,
+    height: TOGGLE_HEIGHT,
+    borderRadius: TOGGLE_HEIGHT / 2,
+    overflow: 'hidden',
+  },
+  toggleIndicatorGlassFill: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   gridSearchBar: {
     flexDirection: 'row',
@@ -978,12 +1085,6 @@ const styles = StyleSheet.create({
   toggleOuterTint: {
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  togglePill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-    borderRadius: radii.pill,
-    overflow: 'hidden',
-  },
   togglePillTint: {
     backgroundColor: discoverColors.pillBg,
   },
@@ -991,9 +1092,18 @@ const styles = StyleSheet.create({
     color: discoverColors.mutedText,
     fontSize: 15,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: TOGGLE_HEIGHT,
   },
   toggleLabelActive: {
     color: '#FFFFFF',
+  },
+  toggleLabelOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   comingSoon: {
     flex: 1,
@@ -1013,7 +1123,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: HOME_PADDING_X,
     gap: spacing.xl,
     paddingBottom: NAV_CLEARANCE,
   },
@@ -1178,9 +1288,9 @@ const styles = StyleSheet.create({
     width: '50%',
   },
   popularCoverSkeleton: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
+    width: POPULAR_COVER_SIZE,
+    height: POPULAR_COVER_SIZE,
+    borderRadius: 9,
   },
   addPillSkeleton: {
     width: 70,
@@ -1201,17 +1311,18 @@ const styles = StyleSheet.create({
   popularRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    // Figma gap 16 / padding 8, ÷1.1.
+    gap: 14,
     backgroundColor: discoverColors.rowBg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: 7,
+    paddingVertical: 7,
     marginBottom: 2,
   },
   popularRowLast: {
     marginBottom: 0,
   },
   popularCover: {
-    borderRadius: 10,
+    borderRadius: 9,
   },
   popularInfo: {
     flex: 1,
@@ -1226,6 +1337,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 6,
   },
+  addPillGlass: {
+    borderRadius: radii.pill,
+  },
+  /** Pre-iOS-26 / Android stand-in for the glass fill. */
+  addPillTint: {
+    backgroundColor: discoverColors.pillBg,
+  },
   addIcon: {
     width: 14,
     height: 14,
@@ -1236,7 +1354,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   feedContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: HOME_PADDING_X,
     gap: spacing.md,
     paddingBottom: NAV_CLEARANCE,
   },

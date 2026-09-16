@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Image, type ImageSource } from 'expo-image';
@@ -59,26 +59,24 @@ export function SideMenu() {
   const insets = useSafeAreaInsets();
   const session = useAuthStore((state) => state.session);
 
-  // Stays mounted while the close animation runs, then unmounts.
-  const [mounted, setMounted] = useState(isOpen);
-  const progress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
+  // The panel stays in the tree and is driven entirely by `progress`: closed it sits one panel
+  // width off-screen and takes no touches. Tracking a separate "mounted" flag meant the open and
+  // the unmount raced, and the panel could unmount immediately after opening.
+  const [progress] = useState(() => new Animated.Value(isOpen ? 1 : 0));
   const [profile, setProfile] = useState<MyProfileSummary | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setMounted(true);
-      Animated.spring(progress, {
-        toValue: 1,
-        useNativeDriver: true,
-        stiffness: 260,
-        damping: 30,
-        mass: 1,
-      }).start();
-      return;
-    }
-    Animated.timing(progress, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
-      if (finished) setMounted(false);
-    });
+    const animation = isOpen
+      ? Animated.spring(progress, {
+          toValue: 1,
+          useNativeDriver: true,
+          stiffness: 260,
+          damping: 30,
+          mass: 1,
+        })
+      : Animated.timing(progress, { toValue: 0, duration: 220, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
   }, [isOpen, progress]);
 
   useEffect(() => {
@@ -88,8 +86,6 @@ export function SideMenu() {
       .then(setProfile)
       .catch((err) => console.warn('[side-menu] profile summary failed', err));
   }, [isOpen, profile, session?.user.id]);
-
-  if (!mounted) return null;
 
   function goToLibrary(tab: 'games' | 'friends') {
     hide();
@@ -124,7 +120,7 @@ export function SideMenu() {
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-PANEL_WIDTH, 0] });
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={StyleSheet.absoluteFill} pointerEvents={isOpen ? 'box-none' : 'none'}>
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
         <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
         <Pressable accessibilityLabel="Close menu" onPress={hide} style={[StyleSheet.absoluteFill, styles.dim]} />

@@ -223,6 +223,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   otpInput: {
+    color: colors.text,
     fontSize: 24,
     fontWeight: '700',
     letterSpacing: 8,

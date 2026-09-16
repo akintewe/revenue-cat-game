@@ -1,9 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type ImageStyle, type ViewStyle } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Wordmark } from './brand/Wordmark';
+import { BellIcon } from './icons/BellIcon';
 import { colors, discoverColors } from '../theme/theme';
 
 /**
@@ -34,13 +35,15 @@ export const TOP_BAR_HEIGHT = BUTTON;
 const ICONS = {
   menu: require('../../../assets/figma-icons/topbar-menu.png') as ImageSource,
   back: require('../../../assets/figma-icons/topbar-back.png') as ImageSource,
-  bell: require('../../../assets/figma-icons/topbar-bell.png') as ImageSource,
   pencil: require('../../../assets/figma-icons/topbar-pencil.png') as ImageSource,
   share: require('../../../assets/figma-icons/topbar-share.png') as ImageSource,
   gift: require('../../../assets/figma-icons/topbar-gift.png') as ImageSource,
 };
 
-export type TopBarIcon = keyof typeof ICONS;
+/** The bell is vector, so its unread dot keeps its own colours while the glyph takes the tint. */
+const BELL_SIZE = 28;
+
+export type TopBarIcon = keyof typeof ICONS | 'bell';
 
 export type TopBarAction = {
   icon: TopBarIcon;
@@ -94,7 +97,12 @@ export function TopBar({
             accessibilityLabel="Open menu"
             style={styles.menuHit}
           >
-            <Image source={ICONS.menu} style={styles.menuIcon} contentFit="contain" />
+            <Image
+              source={ICONS.menu}
+              style={styles.menuIcon}
+              contentFit="contain"
+              tintColor={discoverColors.iconMuted}
+            />
           </Pressable>
         )}
         {badge !== undefined && badge !== '' && (
@@ -104,7 +112,7 @@ export function TopBar({
         )}
         {leadingExtra && (
           <Pressable onPress={onLeadingExtraPress} hitSlop={8} accessibilityRole="button" style={styles.extraHit}>
-            <Image source={ICONS[leadingExtra]} style={styles.extraIcon} contentFit="contain" />
+            <TopBarGlyph icon={leadingExtra} style={styles.extraIcon} />
           </Pressable>
         )}
       </View>
@@ -129,16 +137,14 @@ export function TopBar({
   );
 }
 
+/** One top-bar glyph, tinted the muted icon colour. The bell is vector; the rest are PNG exports. */
+function TopBarGlyph({ icon, style }: { icon: TopBarIcon; style: ImageStyle }) {
+  if (icon === 'bell') return <BellIcon size={BELL_SIZE} />;
+  return <Image source={ICONS[icon]} style={style} contentFit="contain" tintColor={discoverColors.iconMuted} />;
+}
+
 function CircleButton({ icon, accessibilityLabel, onPress }: TopBarAction) {
-  const image = (
-    <Image
-      source={ICONS[icon]}
-      style={styles.icon}
-      contentFit="contain"
-      // The bell carries its own orange dot; every other glyph is tinted the muted icon grey.
-      tintColor={icon === 'bell' ? undefined : discoverColors.iconMuted}
-    />
-  );
+  const image = <TopBarGlyph icon={icon} style={styles.icon} />;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} hitSlop={4}>
       {glassAvailable ? (

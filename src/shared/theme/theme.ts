@@ -34,8 +34,10 @@ export const discoverColors = {
   rowBg: '#181615',
   titleText: '#E1D9D4',
   mutedText: '#646464',
-  /** Muted icon/chevron gray used on "left_small_regular" and inactive tab glyphs. */
-  iconMuted: '#8F8793',
+  /** Muted icon/chevron tint for top-bar glyphs, chevrons and inactive tab icons. */
+  iconMuted: 'rgba(255,255,255,0.5)',
+  /** Outline that separates the unread dot from the glyph under it. */
+  badgeRing: '#290D06',
   /** Fill tint for GLASS-effect chips (segmented toggle active pill, Add pill). */
   pillBg: 'rgba(255,255,255,0.1)',
   /** Fill tint for the GLASS-effect bottom nav pill — real blur is applied separately. */

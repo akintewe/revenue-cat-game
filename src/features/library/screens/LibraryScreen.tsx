@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -116,7 +116,7 @@ function DashboardToggle({ value, onChange }: { value: DashboardTab; onChange: (
     0,
     DASHBOARD_TABS.findIndex((tab) => tab.key === value),
   );
-  const position = useRef(new Animated.Value(selectedIndex)).current;
+  const [position] = useState(() => new Animated.Value(selectedIndex));
 
   useEffect(() => {
     Animated.spring(position, {
@@ -197,10 +197,19 @@ export function LibraryScreen({ navigation, route }: Props) {
   const showSideMenu = useSideMenuStore((state) => state.show);
   const requestedTab = route.params?.tab;
 
-  // The side menu picks Games / Friends through the route param. Consume it once.
+  // The side menu picks Games / Friends through the route param. Applying it during render
+  // avoids a frame on the old tab; the effect only clears the param afterwards.
+  // Tracking the param itself, not the tab, matters: the effect below clears the param, which
+  // resets this to undefined. Without that reset, picking Friends, switching back with the
+  // toggle, then picking Friends again would match the old value and do nothing.
+  const [appliedTab, setAppliedTab] = useState<DashboardTab | undefined>(undefined);
+  if (requestedTab !== appliedTab) {
+    setAppliedTab(requestedTab);
+    if (requestedTab) setTab(requestedTab);
+  }
+
   useEffect(() => {
     if (!requestedTab) return;
-    setTab(requestedTab);
     navigation.setParams({ tab: undefined });
   }, [navigation, requestedTab]);
   const userId = useAuthStore((state) => state.session?.user.id);

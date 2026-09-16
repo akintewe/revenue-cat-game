@@ -38,6 +38,9 @@ const navigationRef = createNavigationContainerRef<RootStackParamList>();
 /** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
 const MIN_SPLASH_MS = 700;
 
+/** How new an account has to be to count as "just signed up" for onboarding routing. */
+const FRESH_SIGNUP_WINDOW_MS = 30 * 60 * 1000;
+
 const navigationTheme = {
   ...DefaultTheme,
   colors: {
@@ -120,7 +123,14 @@ export function RootNavigator() {
         );
       }
       if (session?.user.id) {
-        setOnboardingPending(!useOnboardingStore.getState().isComplete(session.user.id));
+        // Local-only flag can't tell "just signed up" from "existing account, new device" —
+        // an account created more than half an hour ago is treated as a returning login
+        // regardless of whether this device has seen it before, so onboarding never
+        // re-triggers for someone who just reinstalled or switched phones.
+        const notCompletedLocally = !useOnboardingStore.getState().isComplete(session.user.id);
+        const createdAt = session.user.created_at ? new Date(session.user.created_at).getTime() : 0;
+        const isFreshSignup = createdAt > 0 && Date.now() - createdAt < FRESH_SIGNUP_WINDOW_MS;
+        setOnboardingPending(notCompletedLocally && isFreshSignup);
       }
       // identifyOneSignalUser(session.user.id) — re-enable alongside initOneSignal()
       // in App.tsx once a build with the OneSignal native module is out.

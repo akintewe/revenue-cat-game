@@ -9,8 +9,8 @@
     "scheme": "prysm",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nathanakin.revenuecatgame",
-      "appleTeamId": "96CJG9LV69",
+      "bundleIdentifier": "com.fastmakers.revenuecatgame",
+      "appleTeamId": "XGXZD8NQ34",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

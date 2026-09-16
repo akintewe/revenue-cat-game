@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GameCover } from '../../../shared/components/GameCover';
 import { PlatformIcon } from '../../../shared/components/PlatformIcon';
 import { EmptyState } from '../../../shared/components/EmptyState';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { colors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import type { CatalogGame } from '../../../data/catalog';
 import { resolveShare, confirmShare, type ShareResolution } from '../../../services/social/share';
@@ -66,6 +67,7 @@ export function ShareConfirmScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <ScreenBackground />
       <View style={styles.safeArea}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.closeButton}>

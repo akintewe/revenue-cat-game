@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -29,14 +30,13 @@ import { colors, coverColors, discoverColors, radii, spacing } from '../../../sh
 import { TopBar } from '../../../shared/components/TopBar';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
-import { useRecentlyViewedStore } from '../../addGame/store/useRecentlyViewedStore';
 import { useSideMenuStore } from '../../menu/store/useSideMenuStore';
 import { CATALOG, type CatalogGame } from '../../../data/catalog';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { fetchPopularSuggestions, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
 import { GAME_STATUSES, STATUS_LABEL, type GameStatus } from '../types';
 import { STATUS_ICON } from '../../../shared/types/status';
-import { formatReleaseLabel } from '../../../shared/utils/formatDate';
+import { formatReleaseLabel, timeAgo } from '../../../shared/utils/formatDate';
 import {
   createPost,
   deletePost,
@@ -48,13 +48,16 @@ import {
   type FeedPost,
 } from '../../../services/social/feed';
 import { useAuthStore } from '../../auth/store/useAuthStore';
-import { fetchMyAvatarColor } from '../../../services/social/profiles';
+import { fetchMyAvatarColor, fetchMyDisplayName } from '../../../services/social/profiles';
+import { fetchUnreadNotificationCount } from '../../../services/social/notifications';
+import { blockUser, reportContent } from '../../../services/social/moderation';
 import type { CoverColorKey } from '../../../data/catalog';
 import type { TabScreenProps } from '../../../core/navigation/types';
 
 const GRID_SEARCH_DEBOUNCE_MS = 350;
 const GRID_POPULAR_LIMIT = 15;
 
+const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
 const CHEVRON_ICON = require('../../../../assets/figma-icons/chevron-forward.png') as ImageSource;
 
@@ -82,6 +85,8 @@ const LIBRARY_RECENT_LIMIT = 5;
 const NAV_CLEARANCE = 40;
 const EXPLORE_POPULAR_LIMIT = 3;
 const EXPLORE_SAVED_LIMIT = 6;
+const TOP_PLAYED_LIMIT = 10;
+
 /** Figma 64 ÷ 1.1 — the mock frame is 1.1× device points. */
 const POPULAR_COVER_SIZE = 58;
 /** Side gutter of the home dashboard (header, Games content, Friends feed). */
@@ -184,17 +189,6 @@ function DashboardToggle({ value, onChange }: { value: DashboardTab; onChange: (
   );
 }
 
-function timeAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return 'now';
-  const minutes = seconds / 60;
-  if (minutes < 60) return `${Math.floor(minutes)}m`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${Math.floor(hours)}h`;
-  const days = hours / 24;
-  if (days < 7) return `${Math.floor(days)}d`;
-  return `${Math.floor(days / 7)}w`;
-}
 
 type Props = TabScreenProps<'LibraryTab'>;
 
@@ -211,13 +205,42 @@ export function LibraryScreen({ navigation, route }: Props) {
   }, [navigation, requestedTab]);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [myAvatarColor, setMyAvatarColor] = useState<CoverColorKey | null>(null);
+  const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      fetchUnreadNotificationCount()
+        .then((count) => {
+          if (!cancelled) setUnreadCount(count);
+        })
+        .catch(() => undefined);
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   useEffect(() => {
-    if (!userId) return;
-    fetchMyAvatarColor(userId)
-      .then(setMyAvatarColor)
-      .catch(() => undefined);
-  }, [userId]);
+    if (route.params?.openBrowse) {
+      openLibraryBrowser();
+      navigation.setParams({ openBrowse: undefined });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.openBrowse]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      fetchMyAvatarColor(userId)
+        .then(setMyAvatarColor)
+        .catch(() => undefined);
+      fetchMyDisplayName(userId)
+        .then(setMyDisplayName)
+        .catch(() => undefined);
+    }, [userId]),
+  );
 
   // Tapping the already-active Library tab icon backs out of any in-place browsing
   // mode (popular grid, library browser) instead of doing nothing.
@@ -296,6 +319,49 @@ export function LibraryScreen({ navigation, route }: Props) {
     ]);
   }
 
+  function handleReportPost(post: FeedPost) {
+    if (!userId) return;
+    Alert.alert(`@${post.handle}`, undefined, [
+      {
+        text: 'Block this account',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Block this account?', 'You will no longer see each other on Prysm.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => {
+                blockUser(userId, post.author_id)
+                  .then(() => setFeedPosts((prev) => prev.filter((p) => p.author_id !== post.author_id)))
+                  .catch((err) => console.warn('[moderation] blockUser failed', err));
+              },
+            },
+          ]);
+        },
+      },
+      {
+        text: 'Report post',
+        onPress: () => {
+          const reasonButtons: NonNullable<Parameters<typeof Alert.alert>[2]> = [
+            ...REPORT_REASONS.map((reason) => ({
+              text: reason,
+              onPress: () => {
+                reportContent(userId, 'post', post.id, reason).catch((err) =>
+                  console.warn('[moderation] reportContent failed', err),
+                );
+                Alert.alert('Reported', "Thanks — we've received your report.");
+              },
+            })),
+            { text: 'Cancel', style: 'cancel' as const },
+          ];
+          Alert.alert('Report this post', 'What best describes the issue?', reasonButtons);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handlePickComposerImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -331,12 +397,28 @@ export function LibraryScreen({ navigation, route }: Props) {
   const entries = useLibraryStore((state) => state.entries);
   const addGame = useLibraryStore((state) => state.addGame);
   const wishlistEntries = useWishlistStore((state) => state.entries);
-  const recentlyViewedIds = useRecentlyViewedStore((state) => state.catalogIds);
 
   const libraryIds = useMemo(() => new Set(entries.map((entry) => entry.catalogId)), [entries]);
   const wishlistIds = useMemo(() => wishlistEntries.map((entry) => entry.catalogId), [wishlistEntries]);
 
-  const { games: recentlyPlayed, loading: recentlyPlayedLoading } = useResolvedGames(recentlyViewedIds);
+  const allEntryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
+  const { games: allLibraryGames, loading: allLibraryLoading } = useResolvedGames(allEntryIds);
+
+  const libraryRows = useMemo(() => {
+    const byId = new Map(allLibraryGames.map((game) => [game.id, game]));
+    return entries
+      .map((entry) => ({ entry, game: byId.get(entry.catalogId) }))
+      .filter((row): row is { entry: (typeof entries)[number]; game: CatalogGame } => Boolean(row.game));
+  }, [entries, allLibraryGames]);
+
+  // Steam gives us total hours per game but no last-played date or per-device playtime,
+  // so "most played" is the honest signal — not a fabricated "recently played".
+  const topPlayed = useMemo(() => {
+    return [...libraryRows]
+      .sort((a, b) => (b.entry.hoursPlayed ?? 0) - (a.entry.hoursPlayed ?? 0))
+      .slice(0, TOP_PLAYED_LIMIT)
+      .map((row) => row.game);
+  }, [libraryRows]);
 
   const [popularSuggestions, setPopularSuggestions] = useState<CatalogGame[]>([]);
   const [popularLoading, setPopularLoading] = useState(true);
@@ -361,27 +443,17 @@ export function LibraryScreen({ navigation, route }: Props) {
   const { games: savedGamesAll, loading: savedGamesLoading } = useResolvedGames(wishlistIds);
   const savedGames = savedGamesAll.slice(0, EXPLORE_SAVED_LIMIT);
 
-  const stillLoading = recentlyPlayedLoading || savedGamesLoading || popularLoading;
+  const stillLoading = allLibraryLoading || savedGamesLoading || popularLoading;
   const hasAnyContent =
-    stillLoading || recentlyPlayed.length > 0 || popularToShow.length > 0 || savedGames.length > 0;
+    stillLoading || topPlayed.length > 0 || popularToShow.length > 0 || savedGames.length > 0;
 
-  // "Recently played" chevron opens the full library browser in place of the dashboard —
+  // "Top played" chevron opens the full library browser in place of the dashboard —
   // same screen, same tab bar, not a separate stack screen.
   const [libraryBrowsing, setLibraryBrowsing] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>('all');
   const [libraryShowAll, setLibraryShowAll] = useState(false);
   const [librarySortAZ, setLibrarySortAZ] = useState(false);
   const [libraryPromoDismissed, setLibraryPromoDismissed] = useState(false);
-
-  const allEntryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
-  const { games: allLibraryGames } = useResolvedGames(allEntryIds);
-
-  const libraryRows = useMemo(() => {
-    const byId = new Map(allLibraryGames.map((game) => [game.id, game]));
-    return entries
-      .map((entry) => ({ entry, game: byId.get(entry.catalogId) }))
-      .filter((row): row is { entry: (typeof entries)[number]; game: CatalogGame } => Boolean(row.game));
-  }, [entries, allLibraryGames]);
 
   const libraryFilteredRows = useMemo(() => {
     const filtered =
@@ -563,7 +635,15 @@ export function LibraryScreen({ navigation, route }: Props) {
               leading={browsingPopular ? 'back' : 'menu'}
               onLeadingPress={browsingPopular ? () => setBrowsingPopular(false) : showSideMenu}
               title={browsingPopular ? 'Explore popular' : undefined}
-              actions={[{ icon: 'bell', accessibilityLabel: 'Notifications' }]}
+              actions={[
+                {
+                  icon: 'bell',
+                  accessibilityLabel:
+                    unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications',
+                  unread: unreadCount > 0,
+                  onPress: () => navigation.navigate('Notifications'),
+                },
+              ]}
             />
           </View>
         )}
@@ -715,6 +795,10 @@ export function LibraryScreen({ navigation, route }: Props) {
           </ScrollView>
         ) : tab === 'friends' ? (
           <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
+            <Pressable style={styles.findPeopleRow} onPress={() => navigation.navigate('FriendSearch')}>
+              <Ionicons name="search" size={16} color={discoverColors.mutedText} />
+              <Text style={styles.findPeopleText}>Find people to follow</Text>
+            </Pressable>
             <View style={styles.composer}>
               <View style={styles.composerRow}>
                 <TextInput
@@ -773,17 +857,38 @@ export function LibraryScreen({ navigation, route }: Props) {
               </View>
             ) : (
               feedPosts.map((post) => (
-                <View key={post.id} style={styles.postCard}>
+                <Pressable
+                  key={post.id}
+                  style={styles.postCard}
+                  onPress={() =>
+                    navigation.navigate('PostDetail', {
+                      post,
+                      onPostUpdated: (updated) =>
+                        setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+                      onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
+                    })
+                  }
+                >
                   <View style={styles.postHeader}>
-                    <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
-                    <View style={styles.postHeaderText}>
-                      <Text style={styles.postName}>{post.display_name}</Text>
-                      <Text style={styles.postHandle}>@{post.handle}</Text>
-                    </View>
+                    <Pressable
+                      style={styles.postAuthorTapArea}
+                      onPress={() => navigation.navigate('FriendProfile', { handle: post.handle })}
+                      hitSlop={4}
+                    >
+                      <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
+                      <View style={styles.postHeaderText}>
+                        <Text style={styles.postName}>{post.display_name}</Text>
+                        <Text style={styles.postHandle}>@{post.handle}</Text>
+                      </View>
+                    </Pressable>
                     <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
-                    {post.author_id === userId && (
+                    {post.author_id === userId ? (
                       <Pressable style={styles.postDeleteButton} onPress={() => handleDeletePost(post)} hitSlop={8}>
                         <Ionicons name="trash-outline" size={16} color={discoverColors.mutedText} />
+                      </Pressable>
+                    ) : (
+                      <Pressable style={styles.postDeleteButton} onPress={() => handleReportPost(post)} hitSlop={8}>
+                        <Ionicons name="ellipsis-horizontal" size={16} color={discoverColors.mutedText} />
                       </Pressable>
                     )}
                   </View>
@@ -808,12 +913,23 @@ export function LibraryScreen({ navigation, route }: Props) {
                       />
                       {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
                     </Pressable>
-                    <Pressable style={styles.postActionButton} hitSlop={8}>
+                    <Pressable
+                      style={styles.postActionButton}
+                      hitSlop={8}
+                      onPress={() =>
+                        navigation.navigate('PostDetail', {
+                          post,
+                          onPostUpdated: (updated) =>
+                            setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
+                          onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
+                        })
+                      }
+                    >
                       <Ionicons name="chatbubble-outline" size={17} color={discoverColors.mutedText} />
                       {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
                     </Pressable>
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
           </ScrollView>
@@ -824,10 +940,10 @@ export function LibraryScreen({ navigation, route }: Props) {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {(recentlyPlayed.length > 0 || recentlyPlayedLoading) && (
+            {(topPlayed.length > 0 || allLibraryLoading) && (
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Recently played</Text>
+                  <Text style={styles.sectionTitle}>Top played</Text>
                   <Pressable onPress={() => openLibraryBrowser('all', false)} hitSlop={8}>
                     <Image source={CHEVRON_ICON} style={styles.chevronIcon} contentFit="contain" />
                   </Pressable>
@@ -837,8 +953,8 @@ export function LibraryScreen({ navigation, route }: Props) {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.hRow}
                 >
-                  {recentlyPlayed.length > 0
-                    ? recentlyPlayed.map(renderExploreCard)
+                  {topPlayed.length > 0
+                    ? topPlayed.map(renderExploreCard)
                     : [0, 1, 2].map(renderExploreCardSkeleton)}
                 </ScrollView>
               </View>
@@ -941,6 +1057,7 @@ export function LibraryScreen({ navigation, route }: Props) {
         locations={discoverColors.bottomFadeLocations}
         style={styles.bottomFade}
       />
+
     </View>
   );
 }
@@ -1369,6 +1486,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  postAuthorTapArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   postAvatar: {
     width: 40,
     height: 40,
@@ -1440,6 +1563,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  findPeopleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  findPeopleText: {
+    color: discoverColors.mutedText,
+    fontSize: 14,
+    fontWeight: '600',
   },
   composer: {
     gap: spacing.sm,

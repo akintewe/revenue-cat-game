@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { APP_NAME } from '../../../shared/constants/app';
 import { purchasePackage, restorePurchases } from '../../../services/revenuecat/purchases';
 import { useOfferings } from '../hooks/useOfferings';
@@ -78,6 +79,7 @@ export function PaywallScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScreenBackground />
       <Pressable onPress={() => navigation.goBack()} style={styles.closeButton} hitSlop={12}>
         <Ionicons name="close" size={22} color={colors.textMuted} />
       </Pressable>

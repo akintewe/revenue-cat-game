@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing } from '../theme/theme';
+import { ScreenBackground } from './ScreenBackground';
 
 type ScreenProps = PropsWithChildren<{
   background?: string;
@@ -13,6 +14,7 @@ type ScreenProps = PropsWithChildren<{
 export function Screen({ children, background = colors.background, fadeBottom = false }: ScreenProps) {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: background }]}>
+      <ScreenBackground />
       <View style={styles.content}>{children}</View>
       {fadeBottom && (
         <LinearGradient

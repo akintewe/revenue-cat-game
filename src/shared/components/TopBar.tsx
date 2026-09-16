@@ -49,6 +49,8 @@ export type TopBarAction = {
   icon: TopBarIcon;
   accessibilityLabel: string;
   onPress?: () => void;
+  /** Bell only: show the unread dot. */
+  unread?: boolean;
 };
 
 type Props = {
@@ -138,13 +140,13 @@ export function TopBar({
 }
 
 /** One top-bar glyph, tinted the muted icon colour. The bell is vector; the rest are PNG exports. */
-function TopBarGlyph({ icon, style }: { icon: TopBarIcon; style: ImageStyle }) {
-  if (icon === 'bell') return <BellIcon size={BELL_SIZE} />;
+function TopBarGlyph({ icon, style, unread }: { icon: TopBarIcon; style: ImageStyle; unread?: boolean }) {
+  if (icon === 'bell') return <BellIcon size={BELL_SIZE} badge={unread ?? false} />;
   return <Image source={ICONS[icon]} style={style} contentFit="contain" tintColor={discoverColors.iconMuted} />;
 }
 
-function CircleButton({ icon, accessibilityLabel, onPress }: TopBarAction) {
-  const image = <TopBarGlyph icon={icon} style={styles.icon} />;
+function CircleButton({ icon, accessibilityLabel, onPress, unread }: TopBarAction) {
+  const image = <TopBarGlyph icon={icon} style={styles.icon} unread={unread} />;
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} hitSlop={4}>
       {glassAvailable ? (

@@ -3,6 +3,7 @@ import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from 
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
 import { SplashScreen } from '../../shared/components/SplashScreen';
@@ -10,7 +11,16 @@ import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
+import { AchievementDetailScreen } from '../../features/passport/screens/AchievementDetailScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
+import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
+import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
+import { PostDetailScreen } from '../../features/library/screens/PostDetailScreen';
+import { FollowListScreen } from '../../features/friendProfile/screens/FollowListScreen';
+import { FriendSearchScreen } from '../../features/friendProfile/screens/FriendSearchScreen';
+import { NotificationsScreen } from '../../features/notifications/screens/NotificationsScreen';
+import { EditProfileScreen } from '../../features/profile/screens/EditProfileScreen';
+import { DeleteAccountScreen } from '../../features/profile/screens/DeleteAccountScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
@@ -63,6 +73,34 @@ export function RootNavigator() {
   }, [hasShareIntent, status]);
 
   useEffect(() => {
+    if (status !== 'signedIn') return;
+
+    function handleUrl(url: string) {
+      if (!url.includes('link/steam')) return;
+      try {
+        const { queryParams } = Linking.parse(url);
+        const linkStatus = queryParams?.status;
+        const nonce = queryParams?.nonce;
+        if (
+          (linkStatus === 'ok' || linkStatus === 'failed' || linkStatus === 'expired') &&
+          typeof nonce === 'string' &&
+          navigationRef.isReady()
+        ) {
+          navigationRef.navigate('SteamLink', { status: linkStatus, nonce });
+        }
+      } catch (err) {
+        console.warn('[steam-link] failed to parse redirect url', err);
+      }
+    }
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => subscription.remove();
+  }, [status]);
+
+  useEffect(() => {
     initialize();
     const timer = setTimeout(() => setMinSplashElapsed(true), MIN_SPLASH_MS);
     return () => clearTimeout(timer);
@@ -77,9 +115,12 @@ export function RootNavigator() {
           console.warn('[profiles] ensureProfile failed', err),
         );
       }
+      // identifyOneSignalUser(session.user.id) — re-enable alongside initOneSignal()
+      // in App.tsx once a build with the OneSignal native module is out.
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
       useWishlistStore.getState().reset();
+      // clearOneSignalUser() — same as above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -121,6 +162,46 @@ export function RootNavigator() {
               options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen
+              name="SteamLink"
+              component={SteamLinkScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="FriendProfile"
+              component={FriendProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="PostDetail"
+              component={PostDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FollowList"
+              component={FollowListScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="FriendSearch"
+              component={FriendSearchScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="DeleteAccount"
+              component={DeleteAccountScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
+            />
+            <Stack.Screen
               name="Paywall"
               component={PaywallScreen}
               options={{ presentation: 'modal', headerShown: false }}
@@ -129,6 +210,11 @@ export function RootNavigator() {
               name="Passport"
               component={PassportScreen}
               options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
+            />
+            <Stack.Screen
+              name="AchievementDetail"
+              component={AchievementDetailScreen}
+              options={{ headerShown: false, presentation: 'modal' }}
             />
           </Stack.Group>
         )}

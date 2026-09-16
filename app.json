@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.nathanakin.revenuecatgame",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "appleTeamId": "96CJG9LV69"
     },
     "android": {
       "adaptiveIcon": {
@@ -59,7 +60,15 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.610135379378-vh79ejfl909emvu1sv23d0fn1i8qo46u"
         }
-      ]
+      ],
+      "expo-web-browser",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ],
+      "./plugins/withAndroidPackageQueries.js"
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

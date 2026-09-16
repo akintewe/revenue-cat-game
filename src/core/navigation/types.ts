@@ -1,21 +1,31 @@
-import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
+import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { FeedPost } from '../../services/social/feed';
+import type { Stamp } from '../../features/passport/types';
 
 export type TabParamList = {
-  /** `tab` picks the Games / Friends switch, for example from the side menu. */
-  LibraryTab: { tab?: 'games' | 'friends' } | undefined;
+  LibraryTab: { openBrowse?: boolean; tab?: 'games' | 'friends' } | undefined;
   WishlistTab: undefined;
   ProfileTab: undefined;
 };
 
 export type RootStackParamList = {
-  Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  Tabs: { [K in keyof TabParamList]: { screen: K; params?: TabParamList[K] } }[keyof TabParamList] | undefined;
   AddGame: undefined;
   GameDetail: { catalogId: string };
   Paywall: undefined;
   Passport: undefined;
+  AchievementDetail: { stamp: Stamp };
   ShareConfirm: { url: string };
+  SteamLink: { status: 'ok' | 'failed' | 'expired'; nonce: string };
+  FriendProfile: { handle: string };
+  PostDetail: { post: FeedPost; onPostUpdated?: (post: FeedPost) => void; onPostDeleted?: (postId: string) => void };
+  FollowList: { handle: string; mode: 'followers' | 'following' };
+  FriendSearch: undefined;
+  Notifications: undefined;
+  EditProfile: undefined;
+  DeleteAccount: undefined;
   Login: undefined;
 };
 

@@ -1,22 +1,22 @@
-import type { CompositeScreenProps } from '@react-navigation/native';
+import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 export type TabParamList = {
-  LibraryTab: undefined;
+  /** `tab` picks the Games / Friends switch, for example from the side menu. */
+  LibraryTab: { tab?: 'games' | 'friends' } | undefined;
   WishlistTab: undefined;
   ProfileTab: undefined;
 };
 
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   AddGame: undefined;
   GameDetail: { catalogId: string };
   Paywall: undefined;
   Passport: undefined;
   ShareConfirm: { url: string };
   Login: undefined;
-  Signup: undefined;
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<

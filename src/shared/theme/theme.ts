@@ -53,6 +53,37 @@ export const discoverColors = {
   bottomFadeLocations: [0, 0.375, 0.654, 1] as const,
 };
 
+/** Auth screens (login + splash), sampled from Figma at 1.1× and divided back to points. */
+export const authTheme = {
+  splashBackground: '#FD5021',
+  /** Full-page darkening over the cover collage: #00000054. */
+  collageScrim: 'rgba(0,0,0,0.33)',
+  /** Top rectangle, 289pt: solid black fading to clear (measured against the source collage). */
+  topFadeColors: ['rgba(0,0,0,1)', 'rgba(0,0,0,0)'] as const,
+  topFadeHeight: 289,
+  /** Bottom rectangle, 651pt tall from y=223: the exact Figma four-stop gradient. */
+  bottomFadeColors: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.470925)', 'rgba(0,0,0,0.72)', 'rgba(0,0,0,0.8)'] as const,
+  bottomFadeLocations: [0.1442, 0.4183, 0.5529, 1] as const,
+  bottomFadeTop: 223,
+  /** Glass pill fill (#00000080) and the orange button gradient. */
+  glassTint: 'rgba(0,0,0,0.5)',
+  /** Extra darkening over the glass so the pill interior matches the mock (measured ≈5/255). */
+  glassOverlay: 'rgba(0,0,0,0.45)',
+  buttonGradient: ['#FD5021', '#FF3C0B'] as const,
+  /** Inset edge highlights — Figma's four inset shadows, ÷1.1. */
+  glassInsetShadow:
+    '0 1px 0.5px 0 rgba(251,230,112,0.05) inset, 0 -1px 0.5px 0 rgba(0,0,0,0.15) inset, 1px 0 0.5px 0 rgba(0,0,0,0.15) inset, -1px 0 0.5px 0 rgba(0,0,0,0.15) inset',
+  buttonInsetShadow:
+    '0 1px 0.5px 0 rgba(251,230,112,0.25) inset, 0 -1px 0.5px 0 rgba(0,0,0,0.15) inset, 1px 0 0.5px 0 rgba(0,0,0,0.15) inset, -1px 0 0.5px 0 rgba(0,0,0,0.15) inset',
+  controlHeight: 48,
+  controlRadius: 100,
+  pagePaddingX: 20,
+  /** Distance from the last control to the home indicator, plus the indicator's own inset. */
+  pagePaddingBottom: 27.5,
+  placeholder: 'rgba(255,255,255,0.36)',
+  divider: 'rgba(255,255,255,0.2)',
+};
+
 export const coverColors: Record<string, string> = {
   teal: '#2FB6A8',
   orange: '#E8823C',

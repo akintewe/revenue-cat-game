@@ -12,7 +12,6 @@ import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
-import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
 import { useWishlistStore } from '../../features/wishlist/store/useWishlistStore';
@@ -100,17 +99,20 @@ export function RootNavigator() {
         }}
       >
         {status === 'signedOut' ? (
-          <Stack.Group screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Signup" component={SignupScreen} />
-          </Stack.Group>
+          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         ) : (
           <Stack.Group>
             <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
+            {/* Pushed as a card, not a modal: iOS refuses swipe-to-dismiss on fullScreenModal. */}
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}
-              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_bottom',
+                gestureDirection: 'vertical',
+              }}
             />
             <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen

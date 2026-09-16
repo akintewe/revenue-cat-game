@@ -1,127 +1,355 @@
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../../shared/components/Button';
-import { LabeledInput } from '../../../shared/components/LabeledInput';
-import { SocialSignInButtons } from '../components/SocialSignInButtons';
-import { colors, spacing, typography } from '../../../shared/theme/theme';
-import { APP_NAME } from '../../../shared/constants/app';
+import React, { useEffect, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GlassPill } from '../../../shared/components/GlassPill';
+import { Wordmark } from '../../../shared/components/brand/Wordmark';
+import { GoogleMark } from '../../../shared/components/brand/GoogleMark';
+import { authTheme, colors } from '../../../shared/theme/theme';
 import { useAuthStore } from '../store/useAuthStore';
-import type { RootScreenProps } from '../../../core/navigation/types';
 
-type Props = RootScreenProps<'Login'>;
+const COLLAGE = require('../../../../assets/login-collage.png');
 
-export function LoginScreen({ navigation }: Props) {
-  const signIn = useAuthStore((state) => state.signIn);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CODE_LENGTH = 6;
+const RESEND_SECONDS = 30;
+
+type Step = 'email' | 'code';
+
+/**
+ * Login, from the Figma "iPhone 16 & 17 Pro - 46" frame. All sizes are the frame's values ÷ 1.1.
+ * Passwordless: Continue emails a 6-digit code, the same layout then takes the code.
+ * One screen serves sign-in and sign-up; Google is the one-tap path.
+ */
+export function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const requestEmailCode = useAuthStore((s) => s.requestEmailCode);
+  const verifyEmailCode = useAuthStore((s) => s.verifyEmailCode);
+  const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle);
+
+  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState<'none' | 'continue' | 'google'>('none');
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !submitting;
+  const trimmedEmail = email.trim();
+  const canContinue =
+    busy === 'none' &&
+    (step === 'email' ? EMAIL_RE.test(trimmedEmail) : code.length === CODE_LENGTH);
 
-  async function handleSubmit() {
-    if (!canSubmit) return;
-    setSubmitting(true);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  async function sendCode() {
+    setBusy('continue');
     setError(null);
-    const { error: signInError } = await signIn(email.trim(), password);
-    setSubmitting(false);
-    if (signInError) setError(signInError);
+    const { error: sendError } = await requestEmailCode(trimmedEmail);
+    setBusy('none');
+    if (sendError) {
+      setError(sendError);
+      return false;
+    }
+    setResendIn(RESEND_SECONDS);
+    return true;
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.brand}>{APP_NAME.toUpperCase()}</Text>
-          <Text style={typography.heading}>Welcome back</Text>
-          <Text style={styles.subtitle}>Log in to pick up your shelf where you left it.</Text>
+  async function submitCode(value: string) {
+    setBusy('continue');
+    setError(null);
+    const { error: verifyError } = await verifyEmailCode(trimmedEmail, value);
+    setBusy('none');
+    // On success the auth store's session listener flips status to signedIn and this screen unmounts.
+    if (verifyError) setError(verifyError);
+  }
 
-          <View style={styles.form}>
-            <LabeledInput
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              textContentType="emailAddress"
-            />
-            <LabeledInput
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              textContentType="password"
-            />
-            {error && <Text style={styles.error}>{error}</Text>}
-            <Button
-              label={submitting ? 'Logging in…' : 'Log in'}
-              onPress={handleSubmit}
-              disabled={!canSubmit}
-            />
+  async function handleContinue() {
+    if (!canContinue) return;
+    if (step === 'email') {
+      if (await sendCode()) {
+        setCode('');
+        setStep('code');
+      }
+      return;
+    }
+    await submitCode(code);
+  }
+
+  function handleCodeChange(value: string) {
+    const digits = value.replace(/\D/g, '').slice(0, CODE_LENGTH);
+    setCode(digits);
+    setError(null);
+    if (digits.length === CODE_LENGTH && busy === 'none') void submitCode(digits);
+  }
+
+  async function handleGoogle() {
+    if (busy !== 'none') return;
+    setBusy('google');
+    setError(null);
+    const { error: googleError } = await signInWithGoogle();
+    setBusy('none');
+    if (googleError) setError(googleError);
+  }
+
+  function changeEmail() {
+    setStep('email');
+    setCode('');
+    setError(null);
+    setResendIn(0);
+  }
+
+  const continueLabel =
+    busy === 'continue' ? (step === 'email' ? 'Sending code…' : 'Checking…') : 'Continue';
+
+  return (
+    <View style={styles.root}>
+      <Image source={COLLAGE} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <View style={[StyleSheet.absoluteFill, styles.scrim]} />
+      <LinearGradient
+        colors={authTheme.topFadeColors}
+        style={[styles.topFade, { height: authTheme.topFadeHeight }]}
+      />
+      <LinearGradient
+        colors={authTheme.bottomFadeColors}
+        locations={authTheme.bottomFadeLocations}
+        style={[styles.bottomFade, { top: authTheme.bottomFadeTop }]}
+      />
+
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View
+          style={[
+            styles.page,
+            {
+              paddingTop: insets.top + 6.5,
+              paddingBottom: Math.max(insets.bottom, 16) + authTheme.pagePaddingBottom,
+            },
+          ]}
+        >
+          <View style={styles.header}>
+            <Wordmark fontSize={19.7} glow />
           </View>
 
-          <SocialSignInButtons />
+          <View style={styles.flex} />
 
-          <Pressable onPress={() => navigation.replace('Signup')} hitSlop={8} style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don&apos;t have an account? <Text style={styles.footerLink}>Sign up</Text>
-            </Text>
-          </Pressable>
-        </ScrollView>
+          <Text style={styles.headline}>Never lose track{'\n'}of a game again</Text>
+
+          <View style={styles.form}>
+            {step === 'code' && <Text style={styles.hint}>We sent a code to {trimmedEmail}</Text>}
+
+            <GlassPill>
+              {step === 'email' ? (
+                <TextInput
+                  key="email"
+                  style={styles.input}
+                  value={email}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    setError(null);
+                  }}
+                  placeholder="Enter your email address"
+                  placeholderTextColor={authTheme.placeholder}
+                  selectionColor={colors.accent}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="next"
+                  onSubmitEditing={handleContinue}
+                />
+              ) : (
+                <TextInput
+                  key="code"
+                  style={[styles.input, styles.codeInput]}
+                  value={code}
+                  onChangeText={handleCodeChange}
+                  placeholder="Enter the 6-digit code"
+                  placeholderTextColor={authTheme.placeholder}
+                  selectionColor={colors.accent}
+                  keyboardType="number-pad"
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
+                  maxLength={CODE_LENGTH}
+                  returnKeyType="done"
+                  autoFocus
+                  onSubmitEditing={handleContinue}
+                />
+              )}
+            </GlassPill>
+
+            <Pressable onPress={handleContinue} disabled={!canContinue}>
+              <GlassPill
+                interactive
+                tint={colors.accent}
+                overlay={undefined}
+                insetShadow={authTheme.buttonInsetShadow}
+              >
+                <LinearGradient colors={authTheme.buttonGradient} style={StyleSheet.absoluteFill} />
+                <Text style={styles.buttonLabel}>{continueLabel}</Text>
+              </GlassPill>
+            </Pressable>
+
+            {error && <Text style={styles.error}>{error}</Text>}
+
+            {step === 'code' && (
+              <View style={styles.links}>
+                <Pressable onPress={sendCode} disabled={resendIn > 0 || busy !== 'none'} hitSlop={8}>
+                  <Text style={[styles.link, resendIn > 0 && styles.linkMuted]}>
+                    {resendIn > 0 ? `Resend code in ${resendIn}s` : 'Resend code'}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={changeEmail} hitSlop={8}>
+                  <Text style={styles.link}>Use a different email</Text>
+                </Pressable>
+              </View>
+            )}
+
+            <View style={styles.orRow}>
+              <View style={styles.rule} />
+              <Text style={styles.or}>OR</Text>
+              <View style={styles.rule} />
+            </View>
+
+            <Pressable onPress={handleGoogle} disabled={busy !== 'none'}>
+              <GlassPill interactive>
+                <View style={styles.googleRow}>
+                  <GoogleMark size={20} />
+                  <Text style={styles.buttonLabel}>
+                    {busy === 'google' ? 'Signing in…' : 'Continue with Google'}
+                  </Text>
+                </View>
+              </GlassPill>
+            </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#000000',
   },
   flex: {
     flex: 1,
   },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.xs,
+  scrim: {
+    backgroundColor: authTheme.collageScrim,
   },
-  brand: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 13,
-    letterSpacing: 0.4,
-    marginBottom: spacing.sm,
+  topFade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
   },
-  subtitle: {
-    color: colors.textMuted,
-    fontSize: 14,
-    marginTop: 4,
-    marginBottom: spacing.lg,
+  bottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  form: {
-    gap: spacing.sm,
+  page: {
+    flex: 1,
+    paddingHorizontal: authTheme.pagePaddingX,
   },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-  },
-  footer: {
-    marginTop: spacing.xl,
+  header: {
     alignItems: 'center',
   },
-  footerText: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  footerLink: {
-    color: colors.accent,
+  headline: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    lineHeight: 36.3,
     fontWeight: '700',
+    letterSpacing: -0.32,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0.5,
+    marginBottom: 18.5,
+  },
+  form: {
+    gap: 10,
+  },
+  hint: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 24,
+    color: '#FFFFFF',
+    fontSize: 15.5,
+  },
+  codeInput: {
+    letterSpacing: 2,
+  },
+  buttonLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  googleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 25,
+    height: 15,
+  },
+  rule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: authTheme.divider,
+  },
+  or: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 15,
+    fontWeight: '600',
+    letterSpacing: 0.15,
+    textAlign: 'center',
+  },
+  error: {
+    color: '#FFD7CC',
+    fontSize: 13,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  links: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  link: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  linkMuted: {
+    color: 'rgba(255,255,255,0.4)',
   },
 });

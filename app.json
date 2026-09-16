@@ -62,7 +62,8 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "production",
+          "disableLocation": true
         }
       ],
       "./plugins/withAndroidPackageQueries.js"

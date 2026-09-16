@@ -23,6 +23,8 @@ import { EditProfileScreen } from '../../features/profile/screens/EditProfileScr
 import { DeleteAccountScreen } from '../../features/profile/screens/DeleteAccountScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
 import { SignupScreen } from '../../features/auth/screens/SignupScreen';
+import { OnboardingScreen } from '../../features/onboarding/screens/OnboardingScreen';
+import { useOnboardingStore } from '../../features/onboarding/store/useOnboardingStore';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
 import { useWishlistStore } from '../../features/wishlist/store/useWishlistStore';
@@ -61,6 +63,7 @@ export function RootNavigator() {
   const session = useAuthStore((state) => state.session);
   const initialize = useAuthStore((state) => state.initialize);
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
+  const [onboardingPending, setOnboardingPending] = useState<boolean | null>(null);
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
 
   useEffect(() => {
@@ -116,23 +119,28 @@ export function RootNavigator() {
           console.warn('[profiles] ensureProfile failed', err),
         );
       }
+      if (session?.user.id) {
+        setOnboardingPending(!useOnboardingStore.getState().isComplete(session.user.id));
+      }
       // identifyOneSignalUser(session.user.id) — re-enable alongside initOneSignal()
       // in App.tsx once a build with the OneSignal native module is out.
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
       useWishlistStore.getState().reset();
+      setOnboardingPending(null);
       // clearOneSignalUser() — same as above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  if (status === 'loading' || !minSplashElapsed) {
+  if (status === 'loading' || !minSplashElapsed || (status === 'signedIn' && onboardingPending === null)) {
     return <SplashScreen />;
   }
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Stack.Navigator
+        initialRouteName={status === 'signedIn' ? (onboardingPending ? 'Onboarding' : 'Tabs') : undefined}
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.text,
@@ -148,6 +156,11 @@ export function RootNavigator() {
         ) : (
           <Stack.Group>
             <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}

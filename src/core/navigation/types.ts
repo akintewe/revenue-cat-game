@@ -28,6 +28,7 @@ export type RootStackParamList = {
   DeleteAccount: undefined;
   Login: undefined;
   Signup: undefined;
+  Onboarding: undefined;
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<

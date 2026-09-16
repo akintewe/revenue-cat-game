@@ -12,6 +12,8 @@ type AuthStore = {
   initialize: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  verifySignupOtp: (email: string, token: string) => Promise<{ error: string | null }>;
+  resendSignupOtp: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -40,6 +42,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signUp: async (email, password) => {
     const { error } = await supabase.auth.signUp({ email, password });
+    return { error: error?.message ?? null };
+  },
+
+  // Supabase's confirm-signup email carries a 6-digit code here (not a link) — verifying
+  // it establishes a real session, same as signInWithPassword, and the onAuthStateChange
+  // listener above picks it up automatically.
+  verifySignupOtp: async (email, token) => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' });
+    return { error: error?.message ?? null };
+  },
+
+  resendSignupOtp: async (email) => {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
     return { error: error?.message ?? null };
   },
 

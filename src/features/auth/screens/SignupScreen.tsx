@@ -12,14 +12,24 @@ import type { RootScreenProps } from '../../../core/navigation/types';
 
 type Props = RootScreenProps<'Signup'>;
 
+const OTP_LENGTH = 6;
+
 export function SignupScreen({ navigation }: Props) {
   const signUp = useAuthStore((state) => state.signUp);
+  const verifySignupOtp = useAuthStore((state) => state.verifySignupOtp);
+  const resendSignupOtp = useAuthStore((state) => state.resendSignupOtp);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const canSubmit =
     email.trim().length > 0 && password.length >= 6 && password === confirmPassword && !submitting;
@@ -35,25 +45,82 @@ export function SignupScreen({ navigation }: Props) {
       return;
     }
     // Supabase issues a session immediately only if email confirmation is disabled;
-    // otherwise the auth listener won't flip status until the user confirms.
+    // otherwise a 6-digit code lands in their inbox and the OTP form below completes it.
     setConfirmationSent(true);
+  }
+
+  async function handleVerify() {
+    if (otp.length !== OTP_LENGTH || verifying) return;
+    setVerifying(true);
+    setOtpError(null);
+    const { error: verifyError } = await verifySignupOtp(email.trim(), otp);
+    setVerifying(false);
+    if (verifyError) {
+      setOtpError(verifyError);
+      return;
+    }
+    // Session is now set — RootNavigator's auth listener flips to signedIn and routes
+    // a brand-new account straight into onboarding.
+  }
+
+  async function handleResend() {
+    if (resending) return;
+    setResending(true);
+    setOtpError(null);
+    const { error: resendError } = await resendSignupOtp(email.trim());
+    setResending(false);
+    if (resendError) {
+      setOtpError(resendError);
+      return;
+    }
+    setResent(true);
   }
 
   if (confirmationSent) {
     return (
       <SafeAreaView style={styles.container}>
         <ScreenBackground />
-        <View style={styles.content}>
-          <Text style={typography.heading}>Check your email</Text>
-          <Text style={styles.subtitle}>
-            We sent a confirmation link to {email.trim()}. Follow it to finish creating your account.
-          </Text>
-          <Pressable onPress={() => navigation.replace('Login')} hitSlop={8} style={styles.footer}>
-            <Text style={styles.footerText}>
-              Back to <Text style={styles.footerLink}>log in</Text>
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <Text style={typography.heading}>Check your email</Text>
+            <Text style={styles.subtitle}>
+              We sent a 6-digit code to {email.trim()}. Enter it below to finish creating your account.
             </Text>
-          </Pressable>
-        </View>
+
+            <View style={styles.form}>
+              <LabeledInput
+                placeholder="000000"
+                value={otp}
+                onChangeText={(t) => {
+                  setOtp(t.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
+                  setOtpError(null);
+                }}
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                maxLength={OTP_LENGTH}
+                style={styles.otpInput}
+              />
+              {otpError && <Text style={styles.error}>{otpError}</Text>}
+              {resent && !otpError && <Text style={styles.hint}>Sent a new code — check your email.</Text>}
+              <Button
+                label={verifying ? 'Verifying…' : 'Verify'}
+                onPress={handleVerify}
+                disabled={otp.length !== OTP_LENGTH || verifying}
+              />
+            </View>
+
+            <Pressable onPress={handleResend} hitSlop={8} style={styles.footer} disabled={resending}>
+              <Text style={styles.footerText}>
+                Didn&apos;t get it? <Text style={styles.footerLink}>{resending ? 'Sending…' : 'Resend code'}</Text>
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => navigation.replace('Login')} hitSlop={8} style={styles.footer}>
+              <Text style={styles.footerText}>
+                Back to <Text style={styles.footerLink}>log in</Text>
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -154,6 +221,12 @@ const styles = StyleSheet.create({
   hint: {
     color: colors.textFaint,
     fontSize: 12,
+  },
+  otpInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 8,
+    textAlign: 'center',
   },
   error: {
     color: colors.danger,

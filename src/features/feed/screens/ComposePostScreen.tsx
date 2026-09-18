@@ -23,6 +23,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Avatar } from '../../../shared/components/Avatar';
 import { GameCover } from '../../../shared/components/GameCover';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
+import { isUuid } from '../../../shared/utils/id';
+import { resolveRemoteId, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
 import { createPost, uploadPostImage, type PostCategory } from '../../../services/social/feed';
 import { fetchMyProfile, searchUsers, type MyProfile, type ProfileSummary } from '../../../services/social/profiles';
 import type { CatalogGame } from '../../../data/catalog';
@@ -36,6 +38,9 @@ import { CATEGORIES, feedColors, feedLayout } from '../theme';
 
 const MAX_BODY = 500;
 const MAX_OPTION = 40;
+/** One tap adds the tag to the end of the text. */
+const QUICK_TAGS = ['Review', 'Started Playing', '#nowplaying', '#justcompleted', '#unlockedachievement'];
+const SEARCH_DEBOUNCE_MS = 350;
 const POLL_LENGTHS = [
   { hours: 1, label: '1 hour' },
   { hours: 6, label: '6 hours' },
@@ -87,6 +92,13 @@ export function ComposePostScreen({ navigation }: Props) {
     body.length <= MAX_BODY &&
     (attachment.kind !== 'poll' || pollOptions.length >= 2);
 
+  function insertTag(tag: string) {
+    const needsSpace = body.length > 0 && !/\s$/.test(body);
+    const next = `${body}${needsSpace ? ' ' : ''}${tag} `.slice(0, MAX_BODY);
+    setBody(next);
+    setSelection({ start: next.length, end: next.length });
+  }
+
   function insertMention(handle: string) {
     if (!mention) return;
     const next = `${body.slice(0, mention.start)}@${handle} ${body.slice(selection.start)}`;
@@ -119,7 +131,7 @@ export function ComposePostScreen({ navigation }: Props) {
         body: body.trim(),
         category,
         imagePath,
-        gameId: attachment.kind === 'game' ? attachment.game.id : null,
+        gameId: attachment.kind === 'game' ? await gameUuid(attachment.game) : null,
         pollOptions: attachment.kind === 'poll' ? pollOptions : undefined,
         pollHours: attachment.kind === 'poll' ? attachment.hours : undefined,
       });
@@ -232,6 +244,17 @@ export function ComposePostScreen({ navigation }: Props) {
               onChange={(options, hours) => setAttachment({ kind: 'poll', options, hours })}
             />
           )}
+
+          <View style={styles.tagsRow}>
+            <Text style={styles.tagsLabel}>Activity</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tags}>
+              {QUICK_TAGS.map((tag) => (
+                <Pressable key={tag} style={styles.tagChip} onPress={() => insertTag(tag)}>
+                  <Text style={styles.tagChipText}>{tag}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
         </ScrollView>
 
         <View style={[styles.toolbar, { paddingBottom: keyboardUp ? 10 : Math.max(insets.bottom, 10) }]}>
@@ -271,6 +294,11 @@ export function ComposePostScreen({ navigation }: Props) {
   );
 }
 
+/** Posts store the games table uuid. Local demo-catalog games resolve by title. */
+async function gameUuid(game: CatalogGame): Promise<string | null> {
+  return isUuid(game.id) ? game.id : resolveRemoteId(game.title);
+}
+
 /** The feed's game card, filled from a catalog game until the post exists. */
 function gamePreview(game: CatalogGame) {
   const family = game.platform.toLowerCase();
@@ -287,7 +315,8 @@ function gamePreview(game: CatalogGame) {
     game_id: game.id,
     game_title: game.title,
     game_cover: game.coverImageUrl ?? null,
-    game_artwork: null,
+    // Only games-table ids have wide art. A local demo game shows its cover.
+    game_artwork: isUuid(game.id) ? null : '',
     game_year: game.year ?? null,
     game_genres: game.genre ? [game.genre] : null,
     game_rating: game.criticScore ? Math.round(game.criticScore / 2) / 10 : null,
@@ -355,9 +384,12 @@ function GamePicker({
 }) {
   const entries = useLibraryStore((state) => state.entries);
   const ids = useMemo(() => entries.map((e) => e.catalogId), [entries]);
-  const { games, loading } = useResolvedGames(visible ? ids : []);
+  const { games: library, loading: libraryLoading } = useResolvedGames(visible ? ids : []);
   const [query, setQuery] = useState('');
-  const shown = games.filter((g) => g.title.toLowerCase().includes(query.trim().toLowerCase()));
+  const search = useCatalogSearch(visible ? query : '');
+  const searching = query.trim().length > 0;
+  const shown = searching ? search.games : library;
+  const loading = searching ? search.loading : libraryLoading;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -373,7 +405,7 @@ function GamePicker({
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search your library"
+            placeholder="Search any game"
             placeholderTextColor={feedColors.muted}
             style={styles.pickerSearchInput}
             autoCorrect={false}
@@ -388,7 +420,7 @@ function GamePicker({
               <ActivityIndicator style={styles.pickerEmpty} color={feedColors.muted} />
             ) : (
               <Text style={[styles.handle, styles.pickerEmpty]}>
-                {entries.length === 0 ? 'Add games to your library first.' : 'No games match.'}
+                {searching ? 'No games match.' : 'Search for a game, or add games to your library.'}
               </Text>
             )
           }
@@ -438,6 +470,27 @@ function RemoveButton({ onPress }: { onPress: () => void }) {
       <Ionicons name="close" size={14} color="#FFFFFF" />
     </Pressable>
   );
+}
+
+/** The whole catalog, searched as the caller types. */
+function useCatalogSearch(query: string): { games: CatalogGame[]; loading: boolean } {
+  const trimmed = query.trim();
+  const [result, setResult] = useState<{ query: string; games: CatalogGame[] }>({ query: '', games: [] });
+  useEffect(() => {
+    if (!trimmed) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchAllCatalog(trimmed)
+        .then(({ games }) => !cancelled && setResult({ query: trimmed, games }))
+        .catch(() => !cancelled && setResult({ query: trimmed, games: [] }));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [trimmed]);
+  const current = trimmed.length > 0 && result.query === trimmed;
+  return { games: current ? result.games : [], loading: trimmed.length > 0 && !current };
 }
 
 /** The home-indicator inset is only needed while the keyboard is down. */
@@ -664,6 +717,30 @@ const styles = StyleSheet.create({
   },
   lengthTextOn: {
     color: '#FFFFFF',
+  },
+  tagsRow: {
+    gap: 6,
+  },
+  tagsLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: feedColors.muted,
+  },
+  tags: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  tagChip: {
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 100,
+    justifyContent: 'center',
+    backgroundColor: feedColors.pollTrack,
+  },
+  tagChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: feedColors.name,
   },
   toolbar: {
     flexDirection: 'row',

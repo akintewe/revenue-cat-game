@@ -94,6 +94,7 @@ export function RootNavigator() {
             navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
           }
           else if (widgetLink.kind === 'wishlist') navigationRef.navigate('Tabs', { screen: 'WishlistTab' });
+          else if (widgetLink.kind === 'library') navigationRef.navigate('Tabs', { screen: 'LibraryTab' });
           else navigationRef.navigate('Paywall');
         });
         return;

@@ -8,13 +8,33 @@ struct WidgetSnapshot: Decodable {
   let generatedAt: Double
   let isPlus: Bool
   let countdown: Countdown
+  /// Sections added after the first release are optional, so an older snapshot still decodes.
+  let upNext: UpNext?
+  let roulette: RoulettePool?
 
   struct Countdown: Decodable {
     let items: [CountdownItem]
   }
+
+  struct UpNext: Decodable {
+    let items: [UpNextItem]
+    let backlogCount: Int
+  }
+
+  struct RoulettePool: Decodable {
+    let pool: [RouletteItem]
+    let freeRollsPerDay: Int
+  }
 }
 
-struct CountdownItem: Decodable, Identifiable {
+/// What a cover view needs. Every widget item has these three.
+protocol CoverArt {
+  var title: String { get }
+  var coverFile: String? { get }
+  var bleed: String { get }
+}
+
+struct CountdownItem: Decodable, Identifiable, CoverArt {
   let catalogId: String
   let title: String
   let shortTitle: String
@@ -24,6 +44,36 @@ struct CountdownItem: Decodable, Identifiable {
   let bleed: String
 
   var id: String { catalogId }
+}
+
+struct UpNextItem: Decodable, Identifiable, CoverArt {
+  let catalogId: String
+  let title: String
+  let progress: Double?
+  let summary: String
+  let detail: String
+  let coverFile: String?
+  let bleed: String
+
+  var id: String { catalogId }
+}
+
+struct RouletteItem: Decodable, Identifiable, CoverArt {
+  let catalogId: String
+  let title: String
+  let detail: String
+  let coverFile: String?
+  let bleed: String
+
+  var id: String { catalogId }
+}
+
+enum WidgetLink {
+  static func url(_ path: String, id: String? = nil) -> URL? {
+    guard let id else { return URL(string: "prysm://\(path)") }
+    let safe = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+    return URL(string: "prysm://\(path)/\(safe)")
+  }
 }
 
 enum SnapshotStore {

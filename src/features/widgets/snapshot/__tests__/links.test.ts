@@ -13,6 +13,7 @@ describe('parseWidgetLink', () => {
   it('reads the wishlist and paywall links', () => {
     expect(parseWidgetLink('prysm://wishlist')).toEqual({ kind: 'wishlist' });
     expect(parseWidgetLink('prysm://paywall/')).toEqual({ kind: 'paywall' });
+    expect(parseWidgetLink('prysm://library')).toEqual({ kind: 'library' });
   });
   it('ignores everything else', () => {
     expect(parseWidgetLink('prysm://link/steam?status=ok')).toBeNull();

@@ -1,15 +1,10 @@
 import React from 'react';
 import { FlexWidget, ImageWidget, OverlapWidget, TextWidget } from 'react-native-android-widget';
-import type { ImageWidgetSource } from 'react-native-android-widget';
 import type { WidgetSnapshot } from '../snapshot/types';
-import { dim, shortDate, upcoming, type CountdownRow } from './model';
+import { shortDate, upcoming, type CountdownRow } from './model';
+import { ACCENT, Card, Cover, GLASS_BLEED, INK, INK_2, gameLink, openUri } from './parts';
 
 const HOURGLASS = require('../../../../assets/widgets/hourglass.png');
-const ACCENT = '#FD5021';
-const INK = '#FFFFFF';
-const INK_2 = 'rgba(255, 255, 255, 0.62)';
-const GLASS_BLEED = '#D46947';
-const RADIUS = 28;
 
 type Props = { snapshot: WidgetSnapshot | null; size: 'small' | 'medium'; now: Date };
 
@@ -25,26 +20,7 @@ export function CountdownWidget({ snapshot, size, now }: Props) {
   return size === 'medium' ? <Medium hero={hero} rest={rows.slice(1, 3)} /> : <Small hero={hero} />;
 }
 
-function link(row: CountdownRow) {
-  return { clickAction: 'OPEN_URI' as const, clickActionData: { uri: `prysm://game/${encodeURIComponent(row.catalogId)}` } };
-}
-
-function Card({ bleed, children, ...click }: { bleed: string; children: React.ReactNode; clickAction: string; clickActionData?: Record<string, unknown> }) {
-  return (
-    <OverlapWidget
-      {...click}
-      style={{
-        width: 'match_parent',
-        height: 'match_parent',
-        borderRadius: RADIUS,
-        overflow: 'hidden',
-        backgroundGradient: { from: '#000000', to: dim(bleed, 0.55), orientation: 'TL_BR' },
-      }}
-    >
-      {children}
-    </OverlapWidget>
-  );
-}
+const link = (row: CountdownRow) => gameLink('game', row.catalogId);
 
 function Hourglass() {
   return (
@@ -76,29 +52,6 @@ function Small({ hero }: { hero: CountdownRow }) {
   );
 }
 
-function Cover({ row, width, tagged }: { row: CountdownRow; width: number; tagged?: boolean }) {
-  const height = Math.round((width * 4) / 3);
-  return (
-    <OverlapWidget style={{ width, height }}>
-      {row.coverUrl ? (
-        <ImageWidget image={row.coverUrl as ImageWidgetSource} imageWidth={width} imageHeight={height} radius={8} resizeMode="cover" />
-      ) : (
-        <FlexWidget style={{ width, height, borderRadius: 8, backgroundColor: dim(row.bleed, 1), alignItems: 'center', justifyContent: 'center' }}>
-          <TextWidget text={row.title.slice(0, 2).toUpperCase()} style={{ fontSize: Math.round(width * 0.3), fontWeight: '800', color: INK }} />
-        </FlexWidget>
-      )}
-      {tagged ? (
-        <FlexWidget style={{ width, height, justifyContent: 'flex-end', padding: 4 }}>
-          <TextWidget
-            text={`${row.days}d`}
-            style={{ fontSize: 10, fontWeight: '700', color: INK, backgroundColor: 'rgba(0, 0, 0, 0.72)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}
-          />
-        </FlexWidget>
-      ) : null}
-    </OverlapWidget>
-  );
-}
-
 function Medium({ hero, rest }: { hero: CountdownRow; rest: CountdownRow[] }) {
   const out = hero.days === 0;
   return (
@@ -120,16 +73,16 @@ function Medium({ hero, rest }: { hero: CountdownRow; rest: CountdownRow[] }) {
         <OverlapWidget style={{ width: 170, height: 'match_parent' }}>
           {rest[1] ? (
             <FlexWidget style={{ marginLeft: 8, marginTop: 28, rotation: -9 }}>
-              <Cover row={rest[1]} width={62} tagged />
+              <Cover art={rest[1]} width={62} tag={`${rest[1].days}d`} />
             </FlexWidget>
           ) : null}
           {rest[0] ? (
             <FlexWidget style={{ marginLeft: 40, marginTop: 14, rotation: -3 }}>
-              <Cover row={rest[0]} width={78} tagged />
+              <Cover art={rest[0]} width={78} tag={`${rest[0].days}d`} />
             </FlexWidget>
           ) : null}
           <FlexWidget style={{ marginLeft: 76, rotation: 4 }}>
-            <Cover row={hero} width={94} />
+            <Cover art={hero} width={94} radius={10} />
           </FlexWidget>
         </OverlapWidget>
       </FlexWidget>
@@ -139,7 +92,7 @@ function Medium({ hero, rest }: { hero: CountdownRow; rest: CountdownRow[] }) {
 
 function Empty() {
   return (
-    <Card bleed={GLASS_BLEED} clickAction="OPEN_URI" clickActionData={{ uri: 'prysm://wishlist' }}>
+    <Card bleed={GLASS_BLEED} {...openUri('prysm://wishlist')}>
       <Hourglass />
       <FlexWidget style={{ width: 'match_parent', height: 'match_parent', padding: 16, flexDirection: 'column' }}>
         <TextWidget text="Release countdown" style={{ fontSize: 12, fontWeight: '600', color: ACCENT }} />

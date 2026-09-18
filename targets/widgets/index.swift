@@ -5,5 +5,7 @@ import WidgetKit
 struct PrysmWidgets: WidgetBundle {
   var body: some Widget {
     CountdownWidget()
+    UpNextWidget()
+    RouletteWidget()
   }
 }

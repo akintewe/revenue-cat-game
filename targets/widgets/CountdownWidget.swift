@@ -46,7 +46,7 @@ extension CountdownItem {
   )
 
   func days(from date: Date) -> Int { max(ReleaseDate.daysUntil(releaseDate, from: date) ?? 0, 0) }
-  var link: URL? { URL(string: "prysm://game/\(catalogId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? catalogId)") }
+  var link: URL? { WidgetLink.url("game", id: catalogId) }
 }
 
 // MARK: Widget

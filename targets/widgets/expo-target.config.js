@@ -12,6 +12,8 @@ module.exports = () => ({
   },
   images: {
     hourglass: '../../assets/widgets/hourglass.png',
+    d20: '../../assets/widgets/d20.png',
+    controller: '../../assets/widgets/controller.png',
   },
   // The same App Group the app writes the snapshot into (see src/features/widgets/snapshot/types.ts).
   entitlements: {

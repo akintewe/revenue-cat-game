@@ -95,6 +95,50 @@
               "targetCellHeight": 2,
               "resizeMode": "horizontal",
               "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "UpNextSmall",
+              "label": "Up next",
+              "description": "The game you are playing.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "UpNextMedium",
+              "label": "Up next (wide)",
+              "description": "The game you are playing, and how far along you are.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "RouletteSmall",
+              "label": "Roll the backlog",
+              "description": "One tap picks tonight's game.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "RouletteMedium",
+              "label": "Roll the backlog (wide)",
+              "description": "One tap picks tonight's game from your backlog.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
             }
           ]
         }

@@ -3,7 +3,8 @@ export type WidgetLink =
   | { kind: 'game'; catalogId: string }
   /** The roulette's Start button: move the game to Playing, then open it. */
   | { kind: 'start'; catalogId: string }
-  | { kind: 'wishlist' } | { kind: 'paywall' };
+  | { kind: 'wishlist' }
+  | { kind: 'library' } | { kind: 'paywall' };
 
 const PREFIX = /^prysm:\/\/\/?/i;
 
@@ -13,6 +14,7 @@ export function parseWidgetLink(url: string): WidgetLink | null {
   const [path] = url.replace(PREFIX, '').split(/[?#]/);
   const [head, ...rest] = path.split('/').filter(Boolean);
   if (head === 'wishlist' && rest.length === 0) return { kind: 'wishlist' };
+  if (head === 'library' && rest.length === 0) return { kind: 'library' };
   if (head === 'paywall' && rest.length === 0) return { kind: 'paywall' };
   if ((head === 'game' || head === 'start') && rest.length === 1) {
     try {

@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { RootNavigator } from './src/core/navigation/RootNavigator';
 import { configurePurchases } from './src/services/revenuecat/purchases';
+import { useWidgetPublisher } from './src/features/widgets/publish/useWidgetPublisher';
 // initOneSignal() is wired in src/services/notifications/oneSignal.ts but not called
 // yet — the native module only exists in builds made after the OneSignal plugin was
 // added, and TurboModuleRegistry's missing-module invariant isn't reliably catchable
@@ -14,6 +15,7 @@ export default function App() {
   useEffect(() => {
     configurePurchases();
   }, []);
+  useWidgetPublisher();
 
   return (
     <ShareIntentProvider>

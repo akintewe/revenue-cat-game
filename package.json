@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@bacons/apple-targets": "^5.0.0",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.5",
@@ -30,6 +31,7 @@
     "onesignal-expo-plugin": "^2.7.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-android-widget": "^0.22.1",
     "react-native-check-app-install": "^0.0.5",
     "react-native-onesignal": "^5.5.11",
     "react-native-purchases": "^10.9.0",

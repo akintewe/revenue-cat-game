@@ -7,6 +7,7 @@ import * as Linking from 'expo-linking';
 import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
 import { parseWidgetLink } from '../../features/widgets/links';
+import { dispatchPlatformLink, parsePlatformLink } from '../../services/social/platformLink';
 import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
@@ -105,21 +106,13 @@ export function RootNavigator() {
         });
         return;
       }
-      if (!url.includes('link/steam')) return;
-      try {
-        const { queryParams } = Linking.parse(url);
-        const linkStatus = queryParams?.status;
-        const nonce = queryParams?.nonce;
-        if (
-          (linkStatus === 'ok' || linkStatus === 'failed' || linkStatus === 'expired') &&
-          typeof nonce === 'string' &&
-          navigationRef.isReady()
-        ) {
-          navigationRef.navigate('SteamLink', { status: linkStatus, nonce });
-        }
-      } catch (err) {
-        console.warn('[steam-link] failed to parse redirect url', err);
-      }
+      const platformLink = parsePlatformLink(url);
+      if (!platformLink) return;
+      // Onboarding runs the import inside its own step, so it takes the redirect itself.
+      if (dispatchPlatformLink(platformLink)) return;
+      // Anywhere else, only Steam has a result screen. Xbox links are started from onboarding only.
+      if (platformLink.platform !== 'steam') return;
+      whenNavigationReady(() => navigationRef.navigate('SteamLink', { status: platformLink.status, nonce: platformLink.nonce }));
     }
 
     Linking.getInitialURL().then((url) => {

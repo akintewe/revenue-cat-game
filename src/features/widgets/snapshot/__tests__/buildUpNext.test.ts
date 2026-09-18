@@ -51,6 +51,14 @@ describe('buildUpNext', () => {
   });
 });
 
+test('an Xbox or PlayStation import with 0 hours reads as unknown, not as zero', () => {
+  const xbox = { ...entry('a', 'playing', 0), sourceKind: 'xbox' as const };
+  const steam = { ...entry('b', 'playing', 0), sourceKind: 'steam' as const };
+  const { items } = buildUpNext([xbox, steam], { a: game('a', { timeToBeatHours: 20 }), b: game('b', { timeToBeatHours: 20 }) });
+  expect(items.find((i) => i.catalogId === 'a')).toMatchObject({ hoursPlayed: null, summary: 'No hours logged' });
+  expect(items.find((i) => i.catalogId === 'b')).toMatchObject({ hoursPlayed: 0, summary: '0h · just started' });
+});
+
 test('progressWord covers the whole range', () => {
   expect([0, 0.09, 0.1, 0.39, 0.4, 0.59, 0.6, 0.89, 0.9, 0.99, 1].map(progressWord)).toEqual([
     'just started', 'just started', 'early on', 'early on', 'about halfway', 'about halfway',

@@ -85,7 +85,7 @@ export async function disconnectSteam(): Promise<number> {
 
 /** supabase-js only guarantees a generic message on a non-2xx function response — the real
  * `{ error, message, fixUrl }` body has to be read off the underlying Response ourselves. */
-async function readFunctionErrorBody(
+export async function readFunctionErrorBody(
   error: unknown,
 ): Promise<{ error?: string; message?: string; fixUrl?: string } | null> {
   const context = (error as { context?: Response })?.context;
@@ -98,7 +98,7 @@ async function readFunctionErrorBody(
 }
 
 /** Best-effort human-readable message for a functions.invoke error — real body if we can read it. */
-async function describeFunctionError(error: unknown): Promise<string> {
+export async function describeFunctionError(error: unknown): Promise<string> {
   const body = await readFunctionErrorBody(error);
   if (body?.error) return body.error;
   if (error instanceof Error) return error.message;

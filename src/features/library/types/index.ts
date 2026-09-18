@@ -9,8 +9,8 @@ export type LibraryEntry = {
   hoursPlayed: number | null;
   /** Set only by /share-confirm — a game found by search has neither of these. */
   sourceUrl: string | null;
-  /** 'steam' | 'xbox' | 'psn' come from platform import, not /share-confirm — sourceUrl stays null for those. */
-  sourceKind: 'search' | 'manual' | 'tiktok' | 'youtube' | 'steam' | 'xbox' | 'psn' | null;
+  /** 'steam' | 'xbox' | 'psn' | 'android' come from platform import, not /share-confirm — sourceUrl stays null for those. */
+  sourceKind: 'search' | 'manual' | 'tiktok' | 'youtube' | 'steam' | 'xbox' | 'psn' | 'android' | null;
   /** Epoch ms the game was marked beaten, or null if it hasn't been. */
   finishedAt: number | null;
 };

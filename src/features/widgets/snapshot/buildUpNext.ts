@@ -41,7 +41,9 @@ export function buildUpNext(
     if (items.length === UP_NEXT_MAX) break;
     const game = games[entry.catalogId];
     if (!game) continue;
-    const hours = entry.hoursPlayed;
+    // Xbox and PlayStation imports cannot read play time and store 0. That 0 means unknown.
+    const noPlaytimeSource = entry.sourceKind === 'xbox' || entry.sourceKind === 'psn';
+    const hours = noPlaytimeSource && !entry.hoursPlayed ? null : entry.hoursPlayed;
     const timeToBeat = game.timeToBeatHours && game.timeToBeatHours > 0 ? game.timeToBeatHours : null;
     const progress = hours !== null && timeToBeat !== null ? Math.min(hours / timeToBeat, 1) : null;
     items.push({

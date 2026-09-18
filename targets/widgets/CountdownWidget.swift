@@ -172,6 +172,8 @@ struct CountdownMedium: View {
           Text(ReleaseDate.long(hero.releaseDate))
             .font(.system(size: 12))
             .foregroundStyle(Theme.ink2)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         CoverFan(hero: hero, rest: rest, date: date)
@@ -191,12 +193,12 @@ struct CoverFan: View {
   var body: some View {
     ZStack(alignment: .topTrailing) {
       if rest.count > 1 {
-        tagged(rest[1], width: 62, opacity: 0.75).rotationEffect(.degrees(-9)).offset(x: -92, y: 30)
+        tagged(rest[1], width: 62, opacity: 0.75).rotationEffect(.degrees(-9)).offset(x: -108, y: 32)
       }
       if let second = rest.first {
-        tagged(second, width: 78, opacity: 0.9).rotationEffect(.degrees(-3)).offset(x: -50, y: 16)
+        tagged(second, width: 78, opacity: 0.9).rotationEffect(.degrees(-3)).offset(x: -60, y: 18)
       }
-      CoverView(item: hero, width: 100, radius: 10).rotationEffect(.degrees(4)).offset(x: 2, y: 2)
+      CoverView(item: hero, width: 96, radius: 10).rotationEffect(.degrees(4)).offset(x: 2, y: 4)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
   }

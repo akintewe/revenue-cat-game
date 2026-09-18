@@ -23,6 +23,8 @@ import { NotificationsScreen } from '../../features/notifications/screens/Notifi
 import { EditProfileScreen } from '../../features/profile/screens/EditProfileScreen';
 import { DeleteAccountScreen } from '../../features/profile/screens/DeleteAccountScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
+import { OnboardingScreen } from '../../features/onboarding/screens/OnboardingScreen';
+import { useOnboardingStore } from '../../features/onboarding/store/useOnboardingStore';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
 import { useWishlistStore } from '../../features/wishlist/store/useWishlistStore';
@@ -41,6 +43,9 @@ function whenNavigationReady(action: () => void, attempt = 0) {
 
 /** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
 const MIN_SPLASH_MS = 700;
+
+/** How new an account has to be to count as "just signed up" for onboarding routing. */
+const FRESH_SIGNUP_WINDOW_MS = 30 * 60 * 1000;
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -67,6 +72,7 @@ export function RootNavigator() {
   const session = useAuthStore((state) => state.session);
   const initialize = useAuthStore((state) => state.initialize);
   const [minSplashElapsed, setMinSplashElapsed] = useState(false);
+  const [onboardingPending, setOnboardingPending] = useState<boolean | null>(null);
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
 
   useEffect(() => {
@@ -138,23 +144,35 @@ export function RootNavigator() {
           console.warn('[profiles] ensureProfile failed', err),
         );
       }
+      if (session?.user.id) {
+        // Local-only flag can't tell "just signed up" from "existing account, new device" —
+        // an account created more than half an hour ago is treated as a returning login
+        // regardless of whether this device has seen it before, so onboarding never
+        // re-triggers for someone who just reinstalled or switched phones.
+        const notCompletedLocally = !useOnboardingStore.getState().isComplete(session.user.id);
+        const createdAt = session.user.created_at ? new Date(session.user.created_at).getTime() : 0;
+        const isFreshSignup = createdAt > 0 && Date.now() - createdAt < FRESH_SIGNUP_WINDOW_MS;
+        setOnboardingPending(notCompletedLocally && isFreshSignup);
+      }
       // identifyOneSignalUser(session.user.id) — re-enable alongside initOneSignal()
       // in App.tsx once a build with the OneSignal native module is out.
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
       useWishlistStore.getState().reset();
+      setOnboardingPending(null);
       // clearOneSignalUser() — same as above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  if (status === 'loading' || !minSplashElapsed) {
+  if (status === 'loading' || !minSplashElapsed || (status === 'signedIn' && onboardingPending === null)) {
     return <SplashScreen />;
   }
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Stack.Navigator
+        initialRouteName={status === 'signedIn' ? (onboardingPending ? 'Onboarding' : 'Tabs') : undefined}
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.text,
@@ -168,6 +186,11 @@ export function RootNavigator() {
           <Stack.Group>
             <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
             {/* Pushed as a card, not a modal: iOS refuses swipe-to-dismiss on fullScreenModal. */}
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}

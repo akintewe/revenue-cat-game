@@ -1,5 +1,5 @@
 /** @type {import('@bacons/apple-targets/app.plugin').ConfigFunction} */
-module.exports = () => ({
+module.exports = (config) => ({
   type: 'widget',
   name: 'PrysmWidgets',
   displayName: 'Prysm',
@@ -17,6 +17,6 @@ module.exports = () => ({
   },
   // The same App Group the app writes the snapshot into (see src/features/widgets/snapshot/types.ts).
   entitlements: {
-    'com.apple.security.application-groups': ['group.com.nathanakin.revenuecatgame'],
+    'com.apple.security.application-groups': [`group.${config.ios.bundleIdentifier}`],
   },
 });

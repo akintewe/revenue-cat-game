@@ -8,7 +8,8 @@ export const WIDGET_SNAPSHOT_VERSION = 1;
 export const WIDGET_SNAPSHOT_KEY = 'widgetSnapshot';
 /** Folder for cover thumbnails inside the iOS App Group container. */
 export const WIDGET_COVER_DIR = 'widget-covers';
-export const APP_GROUP = 'group.com.nathanakin.revenuecatgame';
+/** `group.` + the iOS bundle id. Also named in targets/widgets (config and SnapshotStore.swift). */
+export const APP_GROUP = 'group.com.fastmakers.revenuecatgame';
 
 export type CountdownItem = {
   catalogId: string;

@@ -77,7 +77,7 @@ enum WidgetLink {
 }
 
 enum SnapshotStore {
-  static let appGroup = "group.com.nathanakin.revenuecatgame"
+  static let appGroup = "group.com.fastmakers.revenuecatgame"
   static let key = "widgetSnapshot"
   static let coverDir = "widget-covers"
   static let supportedVersion = 1

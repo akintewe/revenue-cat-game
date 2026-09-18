@@ -2,18 +2,18 @@
   "expo": {
     "name": "Prysm",
     "slug": "revenue-cat-game",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "prysm",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nathanakin.revenuecatgame",
+      "bundleIdentifier": "com.fastmakers.revenuecatgame",
+      "appleTeamId": "XGXZD8NQ34",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "appleTeamId": "96CJG9LV69"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -65,7 +65,8 @@
       [
         "onesignal-expo-plugin",
         {
-          "mode": "production"
+          "mode": "production",
+          "disableLocation": true
         }
       ],
       "./plugins/withAndroidPackageQueries.js",

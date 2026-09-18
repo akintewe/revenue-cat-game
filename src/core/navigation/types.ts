@@ -21,6 +21,7 @@ export type RootStackParamList = {
   SteamLink: { status: 'ok' | 'failed' | 'expired'; nonce: string };
   FriendProfile: { handle: string };
   PostDetail: { post: FeedPost; onPostUpdated?: (post: FeedPost) => void; onPostDeleted?: (postId: string) => void };
+  ComposePost: { onPostCreated: (post: FeedPost) => void };
   FollowList: { handle: string; mode: 'followers' | 'following' };
   FriendSearch: undefined;
   Notifications: undefined;

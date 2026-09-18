@@ -1,6 +1,27 @@
 import { supabase } from '../supabase/client';
 import type { CoverColorKey } from '../../data/catalog';
 
+/** Client-chosen post topic. No backend column yet — set only on posts composed this session. */
+export type PostCategory = 'trophies' | 'questions' | 'memes';
+
+export type PollOption = {
+  id: string;
+  label: string;
+  votes: number;
+};
+
+/**
+ * A poll attached to a post. There's no backend poll table yet, so this only exists on
+ * posts composed in the current session — voting is optimistic local state, and neither
+ * the poll nor any vote is persisted or visible to anyone else until the backend ships
+ * real poll support (see the onboarding-backend-style ask this should eventually get).
+ */
+export type Poll = {
+  options: PollOption[];
+  endsAt: string;
+  myVoteId: string | null;
+};
+
 export type FeedPost = {
   id: string;
   body: string;
@@ -18,6 +39,13 @@ export type FeedPost = {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean;
+  /** Local-only — see PostCategory. Always undefined on posts loaded from the server. */
+  category?: PostCategory | null;
+  /** Local-only — see Poll. Always undefined on posts loaded from the server. */
+  poll?: Poll | null;
+  /** Local-only optimistic repost count — no backend repost table yet. */
+  repost_count?: number;
+  reposted_by_me?: boolean;
 };
 
 export async function fetchFeed(params?: {
@@ -58,19 +86,25 @@ export async function findPostById(handle: string, postId: string, maxPages = 4)
   return null;
 }
 
+/** Returns the inserted row's id/created_at so callers can build a real optimistic post without a refetch. */
 export async function createPost(
   authorId: string,
   body: string,
   opts?: { linkUrl?: string; gameId?: string; imagePath?: string },
-): Promise<void> {
-  const { error } = await supabase.from('posts').insert({
-    author_id: authorId,
-    body,
-    link_url: opts?.linkUrl ?? null,
-    game_id: opts?.gameId ?? null,
-    image_path: opts?.imagePath ?? null,
-  });
+): Promise<{ id: string; created_at: string }> {
+  const { data, error } = await supabase
+    .from('posts')
+    .insert({
+      author_id: authorId,
+      body,
+      link_url: opts?.linkUrl ?? null,
+      game_id: opts?.gameId ?? null,
+      image_path: opts?.imagePath ?? null,
+    })
+    .select('id, created_at')
+    .single();
   if (error) throw error;
+  return data;
 }
 
 const POST_IMAGES_BUCKET = 'post-images';

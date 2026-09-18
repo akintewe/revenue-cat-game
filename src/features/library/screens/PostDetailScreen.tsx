@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +19,9 @@ import { colors, coverColors, discoverColors, radii, spacing } from '../../../sh
 import { GameCover } from '../../../shared/components/GameCover';
 import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { timeAgo } from '../../../shared/utils/formatDate';
+import { PostRichText } from '../components/PostCard';
+import { PostCategoryPill } from '../components/PostCategoryPill';
+import { PollCard } from '../components/PollCard';
 import {
   addComment,
   deletePost,
@@ -78,6 +82,36 @@ export function PostDetailScreen({ route, navigation }: Props) {
     action.catch((err) => {
       console.warn('[post-detail] toggle like failed', err);
       updatePost({ ...post, liked_by_me: wasLiked, like_count: post.like_count });
+    });
+  }
+
+  function handleRepost() {
+    const wasReposted = post.reposted_by_me ?? false;
+    updatePost({
+      ...post,
+      reposted_by_me: !wasReposted,
+      repost_count: (post.repost_count ?? 0) + (wasReposted ? -1 : 1),
+    });
+  }
+
+  async function handleShare() {
+    try {
+      await Share.share({ message: `${post.display_name} on Prysm: ${post.body}` });
+    } catch (err) {
+      console.warn('[post-detail] share failed', err);
+    }
+  }
+
+  function handleVotePoll(optionId: string) {
+    if (!post.poll || post.poll.myVoteId) return;
+    const poll = post.poll;
+    updatePost({
+      ...post,
+      poll: {
+        ...poll,
+        myVoteId: optionId,
+        options: poll.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
+      },
     });
   }
 
@@ -208,19 +242,30 @@ export function PostDetailScreen({ route, navigation }: Props) {
                 )}
               </View>
 
-              <Text style={styles.postMessage}>{post.body}</Text>
-
-              {post.image_path && (
-                <Image source={{ uri: postImageUrl(post.image_path) }} style={styles.postImage} contentFit="cover" />
+              {post.category && (
+                <View style={styles.categoryRow}>
+                  <PostCategoryPill category={post.category} />
+                </View>
               )}
 
-              {post.game_cover && (
-                <View style={styles.postGameRow}>
-                  <GameCover abbreviation={post.game_title?.slice(0, 2) ?? '??'} colorKey="slate" imageUrl={post.game_cover} size={40} />
-                  <Text style={styles.postGameTitle} numberOfLines={1}>
-                    {post.game_title}
-                  </Text>
-                </View>
+              {post.body ? <PostRichText text={post.body} style={styles.postMessage} /> : null}
+
+              {post.poll ? (
+                <PollCard poll={post.poll} onVote={handleVotePoll} />
+              ) : (
+                <>
+                  {post.image_path && (
+                    <Image source={{ uri: postImageUrl(post.image_path) }} style={styles.postImage} contentFit="cover" />
+                  )}
+                  {post.game_cover && (
+                    <View style={styles.postGameRow}>
+                      <GameCover abbreviation={post.game_title?.slice(0, 2) ?? '??'} colorKey="slate" imageUrl={post.game_cover} size={40} />
+                      <Text style={styles.postGameTitle} numberOfLines={1}>
+                        {post.game_title}
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
 
               <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
@@ -234,10 +279,21 @@ export function PostDetailScreen({ route, navigation }: Props) {
                   />
                   {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
                 </Pressable>
+                <Pressable style={styles.postActionButton} hitSlop={8} onPress={handleRepost}>
+                  <Ionicons
+                    name="repeat-outline"
+                    size={20}
+                    color={post.reposted_by_me ? colors.success : discoverColors.mutedText}
+                  />
+                  {(post.repost_count ?? 0) > 0 && <Text style={styles.postActionCount}>{post.repost_count}</Text>}
+                </Pressable>
                 <View style={styles.postActionButton}>
                   <Ionicons name="chatbubble-outline" size={19} color={discoverColors.mutedText} />
                   {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
                 </View>
+                <Pressable style={[styles.postActionButton, styles.shareButton]} hitSlop={8} onPress={handleShare}>
+                  <Ionicons name="arrow-redo-outline" size={19} color={discoverColors.mutedText} />
+                </Pressable>
               </View>
             </View>
 
@@ -344,6 +400,9 @@ const styles = StyleSheet.create({
   postMenuButton: {
     padding: 4,
   },
+  categoryRow: {
+    flexDirection: 'row',
+  },
   postMessage: {
     color: discoverColors.titleText,
     fontSize: 17,
@@ -387,6 +446,9 @@ const styles = StyleSheet.create({
     color: discoverColors.mutedText,
     fontSize: 13,
     fontWeight: '600',
+  },
+  shareButton: {
+    marginLeft: 'auto',
   },
   commentsLabel: {
     color: colors.textFaint,

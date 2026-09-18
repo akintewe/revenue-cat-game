@@ -16,6 +16,7 @@ import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScr
 import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
 import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
 import { PostDetailScreen } from '../../features/library/screens/PostDetailScreen';
+import { ComposePostScreen } from '../../features/library/screens/ComposePostScreen';
 import { FollowListScreen } from '../../features/friendProfile/screens/FollowListScreen';
 import { FriendSearchScreen } from '../../features/friendProfile/screens/FriendSearchScreen';
 import { NotificationsScreen } from '../../features/notifications/screens/NotificationsScreen';
@@ -196,6 +197,11 @@ export function RootNavigator() {
               name="PostDetail"
               component={PostDetailScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ComposePost"
+              component={ComposePostScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen
               name="FollowList"

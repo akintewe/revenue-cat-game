@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, type ImageSource } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { GameCover } from '../../../shared/components/GameCover';
+import { PostCard } from '../components/PostCard';
 import { GameRow } from '../../../shared/components/GameRow';
 import { StatusPill } from '../../../shared/components/StatusPill';
 import { PreorderPill } from '../../../shared/components/PreorderPill';
@@ -24,16 +24,7 @@ import { fetchPopularSuggestions, searchAllCatalog } from '../../../services/cat
 import { GAME_STATUSES, STATUS_LABEL, type GameStatus } from '../types';
 import { STATUS_ICON } from '../../../shared/types/status';
 import { formatReleaseLabel, timeAgo } from '../../../shared/utils/formatDate';
-import {
-  createPost,
-  deletePost,
-  fetchFeed,
-  likePost,
-  postImageUrl,
-  unlikePost,
-  uploadPostImage,
-  type FeedPost,
-} from '../../../services/social/feed';
+import { deletePost, fetchFeed, likePost, unlikePost, type FeedPost } from '../../../services/social/feed';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import { fetchMyAvatarColor, fetchMyDisplayName } from '../../../services/social/profiles';
 import { fetchUnreadNotificationCount } from '../../../services/social/notifications';
@@ -138,9 +129,6 @@ export function LibraryScreen({ navigation, route }: Props) {
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [composerText, setComposerText] = useState('');
-  const [composerImage, setComposerImage] = useState<{ uri: string; mimeType: string } | null>(null);
-  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     if (tab !== 'friends') return;
@@ -243,36 +231,41 @@ export function LibraryScreen({ navigation, route }: Props) {
     ]);
   }
 
-  async function handlePickComposerImage() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [4, 3],
-    });
-    if (result.canceled || result.assets.length === 0) return;
-    const asset = result.assets[0];
-    setComposerImage({ uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg' });
+  function handlePostCreated(post: FeedPost) {
+    setFeedPosts((prev) => [post, ...prev]);
   }
 
-  async function handlePost() {
-    // The body column requires 1-500 chars — an image needs a caption alongside it, not instead of one.
-    if (!userId || !composerText.trim() || posting) return;
-    setPosting(true);
+  function updateLocalPost(postId: string, patch: Partial<FeedPost>) {
+    setFeedPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...patch } : p)));
+  }
+
+  /** No backend repost table yet — optimistic local toggle only, doesn't persist or notify anyone. */
+  function handleRepost(post: FeedPost) {
+    const wasReposted = post.reposted_by_me ?? false;
+    updateLocalPost(post.id, {
+      reposted_by_me: !wasReposted,
+      repost_count: (post.repost_count ?? 0) + (wasReposted ? -1 : 1),
+    });
+  }
+
+  async function handleShare(post: FeedPost) {
     try {
-      const imagePath = composerImage ? await uploadPostImage(userId, composerImage.uri, composerImage.mimeType) : undefined;
-      await createPost(userId, composerText.trim(), { imagePath });
-      setComposerText('');
-      setComposerImage(null);
-      const posts = await fetchFeed();
-      setFeedPosts(posts);
+      await Share.share({ message: `${post.display_name} on Prysm: ${post.body}` });
     } catch (err) {
-      setFeedError(err instanceof Error ? err.message : 'Could not post');
-    } finally {
-      setPosting(false);
+      console.warn('[feed] share failed', err);
     }
+  }
+
+  function handleVotePoll(post: FeedPost, optionId: string) {
+    if (!post.poll || post.poll.myVoteId) return;
+    const poll = post.poll;
+    updateLocalPost(post.id, {
+      poll: {
+        ...poll,
+        myVoteId: optionId,
+        options: poll.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
+      },
+    });
   }
 
   const entries = useLibraryStore((state) => state.entries);
@@ -710,39 +703,16 @@ export function LibraryScreen({ navigation, route }: Props) {
               <Ionicons name="search" size={16} color={discoverColors.mutedText} />
               <Text style={styles.findPeopleText}>Find people to follow</Text>
             </Pressable>
-            <View style={styles.composer}>
-              <View style={styles.composerRow}>
-                <TextInput
-                  value={composerText}
-                  onChangeText={setComposerText}
-                  placeholder="Share what you're playing…"
-                  placeholderTextColor={discoverColors.mutedText}
-                  style={styles.composerInput}
-                  multiline
-                />
-                <Pressable
-                  style={[styles.composerButton, (!composerText.trim() || posting) && styles.composerButtonDisabled]}
-                  onPress={handlePost}
-                  disabled={!composerText.trim() || posting}
-                >
-                  <Text style={styles.composerButtonText}>{posting ? 'Posting…' : 'Post'}</Text>
-                </Pressable>
+            <Pressable
+              style={styles.composeBar}
+              onPress={() => navigation.navigate('ComposePost', { onPostCreated: handlePostCreated })}
+            >
+              <View style={[styles.composeBarAvatar, myAvatarColor && { backgroundColor: coverColors[myAvatarColor] }]}>
+                {!myAvatarColor && <Ionicons name="person" size={15} color={discoverColors.mutedText} />}
               </View>
-              <View style={styles.composerToolsRow}>
-                <Pressable style={styles.composerImageButton} onPress={handlePickComposerImage} hitSlop={8}>
-                  <Ionicons name="image-outline" size={18} color={discoverColors.mutedText} />
-                  <Text style={styles.composerImageButtonText}>Photo</Text>
-                </Pressable>
-                {composerImage && (
-                  <View style={styles.composerImagePreviewWrap}>
-                    <Image source={{ uri: composerImage.uri }} style={styles.composerImagePreview} contentFit="cover" />
-                    <Pressable style={styles.composerImageRemove} onPress={() => setComposerImage(null)} hitSlop={8}>
-                      <Ionicons name="close" size={12} color={colors.text} />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            </View>
+              <Text style={styles.composeBarText}>Share what you're playing…</Text>
+              <Ionicons name="add-circle" size={22} color={colors.accent} />
+            </Pressable>
 
             {feedError && <Text style={styles.feedError}>{feedError}</Text>}
 
@@ -768,10 +738,11 @@ export function LibraryScreen({ navigation, route }: Props) {
               </View>
             ) : (
               feedPosts.map((post) => (
-                <Pressable
+                <PostCard
                   key={post.id}
-                  style={styles.postCard}
-                  onPress={() =>
+                  post={post}
+                  onPressAuthor={() => navigation.navigate('FriendProfile', { handle: post.handle })}
+                  onOpenDetail={() =>
                     navigation.navigate('PostDetail', {
                       post,
                       onPostUpdated: (updated) =>
@@ -779,68 +750,13 @@ export function LibraryScreen({ navigation, route }: Props) {
                       onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
                     })
                   }
-                >
-                  <View style={styles.postHeader}>
-                    <Pressable
-                      style={styles.postAuthorTapArea}
-                      onPress={() => navigation.navigate('FriendProfile', { handle: post.handle })}
-                      hitSlop={4}
-                    >
-                      <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
-                      <View style={styles.postHeaderText}>
-                        <Text style={styles.postName}>{post.display_name}</Text>
-                        <Text style={styles.postHandle}>@{post.handle}</Text>
-                      </View>
-                    </Pressable>
-                    <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
-                    {post.author_id === userId ? (
-                      <Pressable style={styles.postDeleteButton} onPress={() => handleDeletePost(post)} hitSlop={8}>
-                        <Ionicons name="trash-outline" size={16} color={discoverColors.mutedText} />
-                      </Pressable>
-                    ) : (
-                      <Pressable style={styles.postDeleteButton} onPress={() => handleReportPost(post)} hitSlop={8}>
-                        <Ionicons name="ellipsis-horizontal" size={16} color={discoverColors.mutedText} />
-                      </Pressable>
-                    )}
-                  </View>
-                  <Text style={styles.postMessage}>{post.body}</Text>
-                  {post.image_path && (
-                    <Image source={{ uri: postImageUrl(post.image_path) }} style={styles.postImage} contentFit="cover" />
-                  )}
-                  {post.game_cover && (
-                    <View style={styles.postGameRow}>
-                      <GameCover abbreviation={post.game_title?.slice(0, 2) ?? '??'} colorKey="slate" imageUrl={post.game_cover} size={40} />
-                      <Text style={styles.postGameTitle} numberOfLines={1}>
-                        {post.game_title}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.postActions}>
-                    <Pressable style={styles.postActionButton} hitSlop={8} onPress={() => handleToggleLike(post)}>
-                      <Ionicons
-                        name={post.liked_by_me ? 'heart' : 'heart-outline'}
-                        size={18}
-                        color={post.liked_by_me ? colors.accent : discoverColors.mutedText}
-                      />
-                      {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
-                    </Pressable>
-                    <Pressable
-                      style={styles.postActionButton}
-                      hitSlop={8}
-                      onPress={() =>
-                        navigation.navigate('PostDetail', {
-                          post,
-                          onPostUpdated: (updated) =>
-                            setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
-                          onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
-                        })
-                      }
-                    >
-                      <Ionicons name="chatbubble-outline" size={17} color={discoverColors.mutedText} />
-                      {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
-                    </Pressable>
-                  </View>
-                </Pressable>
+                  onToggleLike={() => handleToggleLike(post)}
+                  onRepost={() => handleRepost(post)}
+                  onShare={() => handleShare(post)}
+                  onMoreOptions={() => (post.author_id === userId ? handleDeletePost(post) : handleReportPost(post))}
+                  onVotePoll={(optionId) => handleVotePoll(post, optionId)}
+                  onPressGame={(catalogId) => navigation.navigate('GameDetail', { catalogId })}
+                />
               ))
             )}
           </ScrollView>
@@ -1418,78 +1334,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  postAuthorTapArea: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  postAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
   postHeaderText: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 6,
-  },
-  postName: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  postHandle: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-  },
-  postTime: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-  },
-  postDeleteButton: {
-    marginLeft: spacing.xs,
-    padding: 2,
-  },
-  postMessage: {
-    color: discoverColors.titleText,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  postImage: {
-    height: 180,
-    borderRadius: radii.md,
-    backgroundColor: discoverColors.rowBg,
-  },
-  postActions: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  postActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    padding: 2,
-  },
-  postActionCount: {
-    color: discoverColors.mutedText,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  postGameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: discoverColors.rowBg,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-  },
-  postGameTitle: {
-    flex: 1,
-    color: discoverColors.titleText,
-    fontSize: 13,
-    fontWeight: '600',
   },
   postAvatarSkeleton: {
     width: 40,
@@ -1508,79 +1357,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  composer: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-  },
-  composerToolsRow: {
+  composeBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  composerImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    marginBottom: spacing.md,
+    backgroundColor: discoverColors.rowBg,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  composerImageButtonText: {
-    color: discoverColors.mutedText,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  composerImagePreviewWrap: {
-    position: 'relative',
-  },
-  composerImagePreview: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
-  },
-  composerImageRemove: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+  composeBarAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  composerInput: {
+  composeBarText: {
     flex: 1,
-    color: discoverColors.titleText,
+    color: discoverColors.mutedText,
     fontSize: 14,
-    maxHeight: 90,
-    backgroundColor: discoverColors.rowBg,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  composerButton: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  composerButtonDisabled: {
-    opacity: 0.4,
-  },
-  composerButtonText: {
-    color: colors.onAccent,
-    fontWeight: '700',
-    fontSize: 13,
   },
   feedError: {
     color: colors.danger,

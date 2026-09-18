@@ -23,6 +23,7 @@ export type RootStackParamList = {
   PostDetail: { post: FeedPost; onPostUpdated?: (post: FeedPost) => void; onPostDeleted?: (postId: string) => void };
   FollowList: { handle: string; mode: 'followers' | 'following' };
   FriendSearch: undefined;
+  ComposePost: undefined;
   Notifications: undefined;
   EditProfile: undefined;
   DeleteAccount: undefined;

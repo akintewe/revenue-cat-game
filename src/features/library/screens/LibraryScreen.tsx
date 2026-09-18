@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Animated,
   FlatList,
   Platform,
@@ -18,7 +17,6 @@ import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, type ImageSource } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { GameCover } from '../../../shared/components/GameCover';
 import { GameRow } from '../../../shared/components/GameRow';
 import { StatusPill } from '../../../shared/components/StatusPill';
@@ -36,28 +34,18 @@ import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { fetchPopularSuggestions, searchAllCatalog } from '../../../services/catalog/unifiedCatalog';
 import { GAME_STATUSES, STATUS_LABEL, type GameStatus } from '../types';
 import { STATUS_ICON } from '../../../shared/types/status';
-import { formatReleaseLabel, timeAgo } from '../../../shared/utils/formatDate';
-import {
-  createPost,
-  deletePost,
-  fetchFeed,
-  likePost,
-  postImageUrl,
-  unlikePost,
-  uploadPostImage,
-  type FeedPost,
-} from '../../../services/social/feed';
+import { formatReleaseLabel } from '../../../shared/utils/formatDate';
 import { useAuthStore } from '../../auth/store/useAuthStore';
-import { fetchMyAvatarColor, fetchMyDisplayName } from '../../../services/social/profiles';
+import { fetchMyAvatarColor } from '../../../services/social/profiles';
 import { fetchUnreadNotificationCount } from '../../../services/social/notifications';
-import { blockUser, reportContent } from '../../../services/social/moderation';
 import type { CoverColorKey } from '../../../data/catalog';
 import type { TabScreenProps } from '../../../core/navigation/types';
+import { FriendsFeed } from '../../feed/components/FriendsFeed';
+import { feedColors } from '../../feed/theme';
 
 const GRID_SEARCH_DEBOUNCE_MS = 350;
 const GRID_POPULAR_LIMIT = 15;
 
-const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 const ADD_CIRCLE_ICON = require('../../../../assets/figma-icons/add-circle.png') as ImageSource;
 const CHEVRON_ICON = require('../../../../assets/figma-icons/chevron-forward.png') as ImageSource;
 
@@ -214,7 +202,6 @@ export function LibraryScreen({ navigation, route }: Props) {
   }, [navigation, requestedTab]);
   const userId = useAuthStore((state) => state.session?.user.id);
   const [myAvatarColor, setMyAvatarColor] = useState<CoverColorKey | null>(null);
-  const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useFocusEffect(
@@ -245,9 +232,6 @@ export function LibraryScreen({ navigation, route }: Props) {
       fetchMyAvatarColor(userId)
         .then(setMyAvatarColor)
         .catch(() => undefined);
-      fetchMyDisplayName(userId)
-        .then(setMyDisplayName)
-        .catch(() => undefined);
     }, [userId]),
   );
 
@@ -262,146 +246,6 @@ export function LibraryScreen({ navigation, route }: Props) {
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
-
-  const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
-  const [feedLoading, setFeedLoading] = useState(false);
-  const [feedError, setFeedError] = useState<string | null>(null);
-  const [composerText, setComposerText] = useState('');
-  const [composerImage, setComposerImage] = useState<{ uri: string; mimeType: string } | null>(null);
-  const [posting, setPosting] = useState(false);
-
-  useEffect(() => {
-    if (tab !== 'friends') return;
-    let cancelled = false;
-    setFeedLoading(true);
-    setFeedError(null);
-    fetchFeed()
-      .then((posts) => {
-        if (cancelled) return;
-        setFeedPosts(posts);
-        setFeedLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setFeedError(err instanceof Error ? err.message : 'Could not load the feed');
-        setFeedLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab]);
-
-  function handleToggleLike(post: FeedPost) {
-    if (!userId) return;
-    const wasLiked = post.liked_by_me;
-    setFeedPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id ? { ...p, liked_by_me: !wasLiked, like_count: p.like_count + (wasLiked ? -1 : 1) } : p,
-      ),
-    );
-    const action = wasLiked ? unlikePost(userId, post.id) : likePost(userId, post.id);
-    action.catch((err) => {
-      console.warn('[feed] toggle like failed', err);
-      setFeedPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id ? { ...p, liked_by_me: wasLiked, like_count: p.like_count + (wasLiked ? 1 : -1) } : p,
-        ),
-      );
-    });
-  }
-
-  function handleDeletePost(post: FeedPost) {
-    Alert.alert('Delete post?', 'This can\'t be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          const previous = feedPosts;
-          setFeedPosts((prev) => prev.filter((p) => p.id !== post.id));
-          deletePost(post.id).catch((err) => {
-            console.warn('[feed] delete post failed', err);
-            setFeedPosts(previous);
-          });
-        },
-      },
-    ]);
-  }
-
-  function handleReportPost(post: FeedPost) {
-    if (!userId) return;
-    Alert.alert(`@${post.handle}`, undefined, [
-      {
-        text: 'Block this account',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert('Block this account?', 'You will no longer see each other on Prysm.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Block',
-              style: 'destructive',
-              onPress: () => {
-                blockUser(userId, post.author_id)
-                  .then(() => setFeedPosts((prev) => prev.filter((p) => p.author_id !== post.author_id)))
-                  .catch((err) => console.warn('[moderation] blockUser failed', err));
-              },
-            },
-          ]);
-        },
-      },
-      {
-        text: 'Report post',
-        onPress: () => {
-          const reasonButtons: NonNullable<Parameters<typeof Alert.alert>[2]> = [
-            ...REPORT_REASONS.map((reason) => ({
-              text: reason,
-              onPress: () => {
-                reportContent(userId, 'post', post.id, reason).catch((err) =>
-                  console.warn('[moderation] reportContent failed', err),
-                );
-                Alert.alert('Reported', "Thanks — we've received your report.");
-              },
-            })),
-            { text: 'Cancel', style: 'cancel' as const },
-          ];
-          Alert.alert('Report this post', 'What best describes the issue?', reasonButtons);
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
-
-  async function handlePickComposerImage() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [4, 3],
-    });
-    if (result.canceled || result.assets.length === 0) return;
-    const asset = result.assets[0];
-    setComposerImage({ uri: asset.uri, mimeType: asset.mimeType ?? 'image/jpeg' });
-  }
-
-  async function handlePost() {
-    // The body column requires 1-500 chars — an image needs a caption alongside it, not instead of one.
-    if (!userId || !composerText.trim() || posting) return;
-    setPosting(true);
-    try {
-      const imagePath = composerImage ? await uploadPostImage(userId, composerImage.uri, composerImage.mimeType) : undefined;
-      await createPost(userId, composerText.trim(), { imagePath });
-      setComposerText('');
-      setComposerImage(null);
-      const posts = await fetchFeed();
-      setFeedPosts(posts);
-    } catch (err) {
-      setFeedError(err instanceof Error ? err.message : 'Could not post');
-    } finally {
-      setPosting(false);
-    }
-  }
 
   const entries = useLibraryStore((state) => state.entries);
   const addGame = useLibraryStore((state) => state.addGame);
@@ -622,11 +466,14 @@ export function LibraryScreen({ navigation, route }: Props) {
     );
   }
 
+  // The Friends feed is its own Figma frame: a darker page and a black end to the hero gradient.
+  const showFeed = tab === 'friends' && !browsingPopular && !libraryBrowsing;
+
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, showFeed && { backgroundColor: feedColors.background }]}>
       <LinearGradient
-        colors={discoverColors.heroGradient}
-        locations={discoverColors.heroGradientLocations}
+        colors={showFeed ? feedColors.heroGradient : discoverColors.heroGradient}
+        locations={showFeed ? feedColors.heroGradientLocations : discoverColors.heroGradientLocations}
         style={styles.heroGradient}
       />
 
@@ -652,6 +499,10 @@ export function LibraryScreen({ navigation, route }: Props) {
                   unread: unreadCount > 0,
                   onPress: () => navigation.navigate('Notifications'),
                 },
+                // The Friends feed writes from here. The mock has no composer on the page.
+                ...(showFeed
+                  ? [{ icon: 'pencil' as const, accessibilityLabel: 'New post', onPress: () => navigation.navigate('ComposePost') }]
+                  : []),
               ]}
             />
           </View>
@@ -803,145 +654,7 @@ export function LibraryScreen({ navigation, route }: Props) {
             )}
           </ScrollView>
         ) : tab === 'friends' ? (
-          <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
-            <Pressable style={styles.findPeopleRow} onPress={() => navigation.navigate('FriendSearch')}>
-              <Ionicons name="search" size={16} color={discoverColors.mutedText} />
-              <Text style={styles.findPeopleText}>Find people to follow</Text>
-            </Pressable>
-            <View style={styles.composer}>
-              <View style={styles.composerRow}>
-                <TextInput
-                  value={composerText}
-                  onChangeText={setComposerText}
-                  placeholder="Share what you're playing…"
-                  placeholderTextColor={discoverColors.mutedText}
-                  style={styles.composerInput}
-                  multiline
-                />
-                <Pressable
-                  style={[styles.composerButton, (!composerText.trim() || posting) && styles.composerButtonDisabled]}
-                  onPress={handlePost}
-                  disabled={!composerText.trim() || posting}
-                >
-                  <Text style={styles.composerButtonText}>{posting ? 'Posting…' : 'Post'}</Text>
-                </Pressable>
-              </View>
-              <View style={styles.composerToolsRow}>
-                <Pressable style={styles.composerImageButton} onPress={handlePickComposerImage} hitSlop={8}>
-                  <Ionicons name="image-outline" size={18} color={discoverColors.mutedText} />
-                  <Text style={styles.composerImageButtonText}>Photo</Text>
-                </Pressable>
-                {composerImage && (
-                  <View style={styles.composerImagePreviewWrap}>
-                    <Image source={{ uri: composerImage.uri }} style={styles.composerImagePreview} contentFit="cover" />
-                    <Pressable style={styles.composerImageRemove} onPress={() => setComposerImage(null)} hitSlop={8}>
-                      <Ionicons name="close" size={12} color={colors.text} />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {feedError && <Text style={styles.feedError}>{feedError}</Text>}
-
-            {feedLoading ? (
-              [0, 1].map((key) => (
-                <View key={key} style={styles.postCard}>
-                  <View style={styles.postHeader}>
-                    <Shimmer style={styles.postAvatarSkeleton} />
-                    <View style={styles.postHeaderText}>
-                      <Shimmer style={styles.skeletonLine} />
-                    </View>
-                  </View>
-                  <Shimmer style={styles.skeletonLine} />
-                  <Shimmer style={styles.skeletonLineShort} />
-                </View>
-              ))
-            ) : feedPosts.length === 0 ? (
-              <View style={styles.comingSoon}>
-                <Text style={styles.comingSoonTitle}>No posts yet</Text>
-                <Text style={styles.comingSoonBody}>
-                  Follow friends or share what you're playing to get the feed going.
-                </Text>
-              </View>
-            ) : (
-              feedPosts.map((post) => (
-                <Pressable
-                  key={post.id}
-                  style={styles.postCard}
-                  onPress={() =>
-                    navigation.navigate('PostDetail', {
-                      post,
-                      onPostUpdated: (updated) =>
-                        setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
-                      onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
-                    })
-                  }
-                >
-                  <View style={styles.postHeader}>
-                    <Pressable
-                      style={styles.postAuthorTapArea}
-                      onPress={() => navigation.navigate('FriendProfile', { handle: post.handle })}
-                      hitSlop={4}
-                    >
-                      <View style={[styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
-                      <View style={styles.postHeaderText}>
-                        <Text style={styles.postName}>{post.display_name}</Text>
-                        <Text style={styles.postHandle}>@{post.handle}</Text>
-                      </View>
-                    </Pressable>
-                    <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
-                    {post.author_id === userId ? (
-                      <Pressable style={styles.postDeleteButton} onPress={() => handleDeletePost(post)} hitSlop={8}>
-                        <Ionicons name="trash-outline" size={16} color={discoverColors.mutedText} />
-                      </Pressable>
-                    ) : (
-                      <Pressable style={styles.postDeleteButton} onPress={() => handleReportPost(post)} hitSlop={8}>
-                        <Ionicons name="ellipsis-horizontal" size={16} color={discoverColors.mutedText} />
-                      </Pressable>
-                    )}
-                  </View>
-                  <Text style={styles.postMessage}>{post.body}</Text>
-                  {post.image_path && (
-                    <Image source={{ uri: postImageUrl(post.image_path) }} style={styles.postImage} contentFit="cover" />
-                  )}
-                  {post.game_cover && (
-                    <View style={styles.postGameRow}>
-                      <GameCover abbreviation={post.game_title?.slice(0, 2) ?? '??'} colorKey="slate" imageUrl={post.game_cover} size={40} />
-                      <Text style={styles.postGameTitle} numberOfLines={1}>
-                        {post.game_title}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.postActions}>
-                    <Pressable style={styles.postActionButton} hitSlop={8} onPress={() => handleToggleLike(post)}>
-                      <Ionicons
-                        name={post.liked_by_me ? 'heart' : 'heart-outline'}
-                        size={18}
-                        color={post.liked_by_me ? colors.accent : discoverColors.mutedText}
-                      />
-                      {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
-                    </Pressable>
-                    <Pressable
-                      style={styles.postActionButton}
-                      hitSlop={8}
-                      onPress={() =>
-                        navigation.navigate('PostDetail', {
-                          post,
-                          onPostUpdated: (updated) =>
-                            setFeedPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
-                          onPostDeleted: (postId) => setFeedPosts((prev) => prev.filter((p) => p.id !== postId)),
-                        })
-                      }
-                    >
-                      <Ionicons name="chatbubble-outline" size={17} color={discoverColors.mutedText} />
-                      {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
-                    </Pressable>
-                  </View>
-                </Pressable>
-              ))
-            )}
-          </ScrollView>
+          <FriendsFeed />
         ) : !hasAnyContent ? (
           <View style={styles.comingSoon}>
             <Text style={styles.comingSoonTitle}>Your shelf is empty</Text>
@@ -1478,190 +1191,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
-  },
-  feedContent: {
-    paddingHorizontal: HOME_PADDING_X,
-    gap: spacing.md,
-    paddingBottom: NAV_CLEARANCE,
-  },
-  postCard: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  postAuthorTapArea: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  postAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  postHeaderText: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-  },
-  postName: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  postHandle: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-  },
-  postTime: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-  },
-  postDeleteButton: {
-    marginLeft: spacing.xs,
-    padding: 2,
-  },
-  postMessage: {
-    color: discoverColors.titleText,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  postImage: {
-    height: 180,
-    borderRadius: radii.md,
-    backgroundColor: discoverColors.rowBg,
-  },
-  postActions: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-  },
-  postActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    padding: 2,
-  },
-  postActionCount: {
-    color: discoverColors.mutedText,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  postGameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: discoverColors.rowBg,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-  },
-  postGameTitle: {
-    flex: 1,
-    color: discoverColors.titleText,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  postAvatarSkeleton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  findPeopleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  findPeopleText: {
-    color: discoverColors.mutedText,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  composer: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.sm,
-  },
-  composerToolsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  composerImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  composerImageButtonText: {
-    color: discoverColors.mutedText,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  composerImagePreviewWrap: {
-    position: 'relative',
-  },
-  composerImagePreview: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
-  },
-  composerImageRemove: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  composerInput: {
-    flex: 1,
-    color: discoverColors.titleText,
-    fontSize: 14,
-    maxHeight: 90,
-    backgroundColor: discoverColors.rowBg,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  composerButton: {
-    backgroundColor: colors.accent,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  composerButtonDisabled: {
-    opacity: 0.4,
-  },
-  composerButtonText: {
-    color: colors.onAccent,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  feedError: {
-    color: colors.danger,
-    fontSize: 12,
   },
   bottomFade: {
     position: 'absolute',

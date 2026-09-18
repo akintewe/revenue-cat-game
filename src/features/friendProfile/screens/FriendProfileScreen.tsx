@@ -3,14 +3,17 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View }
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { EmptyState } from '../../../shared/components/EmptyState';
+import { Avatar } from '../../../shared/components/Avatar';
+import { PostCard } from '../../feed/components/PostCard';
+import { usePostHandlers } from '../../feed/hooks/usePostHandlers';
+import { feedLayout } from '../../feed/theme';
 import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { fetchProfileStats, followUser, unfollowUser, type ProfileStats } from '../../../services/social/profiles';
 import { blockUser, reportContent } from '../../../services/social/moderation';
 import { fetchFeed, type FeedPost } from '../../../services/social/feed';
 import { useAuthStore } from '../../auth/store/useAuthStore';
-import { timeAgo } from '../../../shared/utils/formatDate';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
@@ -28,6 +31,7 @@ export function FriendProfileScreen({ route, navigation }: Props) {
   const [followBusy, setFollowBusy] = useState(false);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
+  const postHandlers = usePostHandlers({ setPosts });
 
   const load = useCallback(() => {
     setLoading(true);
@@ -159,7 +163,7 @@ export function FriendProfileScreen({ route, navigation }: Props) {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.profileHeader}>
-            <View style={[styles.avatar, { backgroundColor: coverColors[stats.avatar_color] ?? coverColors.slate }]} />
+            <Avatar handle={stats.handle} color={stats.avatar_color} size={72} style={styles.avatar} />
             <Text style={styles.displayName}>{stats.display_name}</Text>
             <Text style={styles.handle}>@{stats.handle}</Text>
             {stats.bio ? <Text style={styles.bio}>{stats.bio}</Text> : null}
@@ -200,22 +204,8 @@ export function FriendProfileScreen({ route, navigation }: Props) {
             <Text style={styles.sectionLabel}>Posts</Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.postCard}
-            onPress={() =>
-              navigation.navigate('PostDetail', {
-                post: item,
-                onPostUpdated: (updated) =>
-                  setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p))),
-                onPostDeleted: (postId) => setPosts((prev) => prev.filter((p) => p.id !== postId)),
-              })
-            }
-          >
-            <Text style={styles.postTime}>{timeAgo(item.created_at)}</Text>
-            <Text style={styles.postBody}>{item.body}</Text>
-          </Pressable>
-        )}
+        renderItem={({ item }) => <PostCard post={item} {...postHandlers} />}
+        ItemSeparatorComponent={PostGap}
         ListEmptyComponent={
           postsLoading ? (
             <ActivityIndicator color={colors.accent} style={styles.postsLoading} />
@@ -226,6 +216,10 @@ export function FriendProfileScreen({ route, navigation }: Props) {
       />
     </View>
   );
+}
+
+function PostGap() {
+  return <View style={{ height: feedLayout.postGap }} />;
 }
 
 const styles = StyleSheet.create({
@@ -248,7 +242,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   listContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: feedLayout.gutter,
     paddingBottom: spacing.xl,
   },
   profileHeader: {
@@ -256,9 +250,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
     marginBottom: spacing.md,
   },
   displayName: {
@@ -323,22 +314,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     marginTop: spacing.xl,
-  },
-  postCard: {
-    backgroundColor: discoverColors.cardBg,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
-    gap: spacing.xs,
-  },
-  postTime: {
-    color: colors.textFaint,
-    fontSize: 12,
-  },
-  postBody: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
   },
   postsLoading: {
     marginTop: spacing.xl,

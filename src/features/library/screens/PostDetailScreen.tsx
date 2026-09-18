@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -12,27 +11,16 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, coverColors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
-import { GameCover } from '../../../shared/components/GameCover';
+import { colors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
+import { Avatar } from '../../../shared/components/Avatar';
 import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { timeAgo } from '../../../shared/utils/formatDate';
-import {
-  addComment,
-  deletePost,
-  fetchComments,
-  likePost,
-  postImageUrl,
-  unlikePost,
-  type FeedPost,
-  type PostComment,
-} from '../../../services/social/feed';
-import { blockUser, reportContent } from '../../../services/social/moderation';
+import { addComment, fetchComments, type FeedPost, type PostComment } from '../../../services/social/feed';
+import { PostCard } from '../../feed/components/PostCard';
+import { usePostHandlers } from '../../feed/hooks/usePostHandlers';
 import { useAuthStore } from '../../auth/store/useAuthStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
-
-const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 
 type Props = RootScreenProps<'PostDetail'>;
 
@@ -41,11 +29,31 @@ export function PostDetailScreen({ route, navigation }: Props) {
   const userId = useAuthStore((state) => state.session?.user.id);
   const { onPostUpdated, onPostDeleted } = route.params;
 
-  const [post, setPost] = useState<FeedPost>(route.params.post);
+  const [posts, setPosts] = useState<FeedPost[]>([route.params.post]);
+  const post = posts[0] ?? route.params.post;
   const [comments, setComments] = useState<PostComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+
+  const onRemoved = useCallback(
+    (removed: FeedPost) => {
+      onPostDeleted?.(removed.id);
+      navigation.goBack();
+    },
+    [navigation, onPostDeleted],
+  );
+  const handlers = usePostHandlers({ setPosts, canOpen: false, onRemoved });
+
+  // Keep the list this post came from in step with likes, reposts, votes and comments here.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (posts[0]) onPostUpdated?.(posts[0]);
+  }, [posts, onPostUpdated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,88 +70,7 @@ export function PostDetailScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
-
-  function updatePost(next: FeedPost) {
-    setPost(next);
-    onPostUpdated?.(next);
-  }
-
-  function handleToggleLike() {
-    if (!userId) return;
-    const wasLiked = post.liked_by_me;
-    updatePost({ ...post, liked_by_me: !wasLiked, like_count: post.like_count + (wasLiked ? -1 : 1) });
-    const action = wasLiked ? unlikePost(userId, post.id) : likePost(userId, post.id);
-    action.catch((err) => {
-      console.warn('[post-detail] toggle like failed', err);
-      updatePost({ ...post, liked_by_me: wasLiked, like_count: post.like_count });
-    });
-  }
-
-  function handleDeletePost() {
-    Alert.alert('Delete post?', "This can't be undone.", [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deletePost(post.id)
-            .then(() => {
-              onPostDeleted?.(post.id);
-              navigation.goBack();
-            })
-            .catch((err) => Alert.alert('Could not delete', err instanceof Error ? err.message : 'Please try again.'));
-        },
-      },
-    ]);
-  }
-
-  function handleMoreOptions() {
-    if (!userId) return;
-    Alert.alert(`@${post.handle}`, undefined, [
-      {
-        text: 'Block this account',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert('Block this account?', 'You will no longer see each other on Prysm.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Block',
-              style: 'destructive',
-              onPress: () => {
-                blockUser(userId, post.author_id)
-                  .then(() => {
-                    onPostDeleted?.(post.id);
-                    navigation.goBack();
-                  })
-                  .catch((err) => console.warn('[moderation] blockUser failed', err));
-              },
-            },
-          ]);
-        },
-      },
-      {
-        text: 'Report post',
-        onPress: () => {
-          const reasonButtons: NonNullable<Parameters<typeof Alert.alert>[2]> = [
-            ...REPORT_REASONS.map((reason) => ({
-              text: reason,
-              onPress: () => {
-                reportContent(userId, 'post', post.id, reason).catch((err) =>
-                  console.warn('[moderation] reportContent failed', err),
-                );
-                Alert.alert('Reported', "Thanks — we've received your report.");
-              },
-            })),
-            { text: 'Cancel', style: 'cancel' as const },
-          ];
-          Alert.alert('Report this post', 'What best describes the issue?', reasonButtons);
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
 
   async function handleSend() {
     const body = draft.trim();
@@ -152,7 +79,7 @@ export function PostDetailScreen({ route, navigation }: Props) {
     try {
       await addComment(post.id, userId, body);
       setDraft('');
-      updatePost({ ...post, comment_count: post.comment_count + 1 });
+      setPosts((prev) => prev.map((p) => ({ ...p, comment_count: p.comment_count + 1 })));
       const refreshed = await fetchComments(post.id);
       setComments(refreshed);
     } catch (err) {
@@ -185,60 +112,7 @@ export function PostDetailScreen({ route, navigation }: Props) {
         ListHeaderComponent={
           <View>
             <View style={styles.postCard}>
-              <View style={styles.postHeader}>
-                <Pressable
-                  style={styles.postAuthorTapArea}
-                  onPress={() => navigation.push('FriendProfile', { handle: post.handle })}
-                  hitSlop={4}
-                >
-                  <View style={[styles.avatar, styles.postAvatar, { backgroundColor: coverColors[post.avatar_color] ?? coverColors.slate }]} />
-                  <View>
-                    <Text style={styles.postName}>{post.display_name}</Text>
-                    <Text style={styles.postHandle}>@{post.handle}</Text>
-                  </View>
-                </Pressable>
-                {post.author_id === userId ? (
-                  <Pressable style={styles.postMenuButton} onPress={handleDeletePost} hitSlop={8}>
-                    <Ionicons name="trash-outline" size={16} color={discoverColors.mutedText} />
-                  </Pressable>
-                ) : (
-                  <Pressable style={styles.postMenuButton} onPress={handleMoreOptions} hitSlop={8}>
-                    <Ionicons name="ellipsis-horizontal" size={16} color={discoverColors.mutedText} />
-                  </Pressable>
-                )}
-              </View>
-
-              <Text style={styles.postMessage}>{post.body}</Text>
-
-              {post.image_path && (
-                <Image source={{ uri: postImageUrl(post.image_path) }} style={styles.postImage} contentFit="cover" />
-              )}
-
-              {post.game_cover && (
-                <View style={styles.postGameRow}>
-                  <GameCover abbreviation={post.game_title?.slice(0, 2) ?? '??'} colorKey="slate" imageUrl={post.game_cover} size={40} />
-                  <Text style={styles.postGameTitle} numberOfLines={1}>
-                    {post.game_title}
-                  </Text>
-                </View>
-              )}
-
-              <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
-
-              <View style={styles.postActions}>
-                <Pressable style={styles.postActionButton} hitSlop={8} onPress={handleToggleLike}>
-                  <Ionicons
-                    name={post.liked_by_me ? 'heart' : 'heart-outline'}
-                    size={20}
-                    color={post.liked_by_me ? colors.accent : discoverColors.mutedText}
-                  />
-                  {post.like_count > 0 && <Text style={styles.postActionCount}>{post.like_count}</Text>}
-                </Pressable>
-                <View style={styles.postActionButton}>
-                  <Ionicons name="chatbubble-outline" size={19} color={discoverColors.mutedText} />
-                  {post.comment_count > 0 && <Text style={styles.postActionCount}>{post.comment_count}</Text>}
-                </View>
-              </View>
+              <PostCard post={post} {...handlers} />
             </View>
 
             <Text style={styles.commentsLabel}>Comments</Text>
@@ -251,7 +125,9 @@ export function PostDetailScreen({ route, navigation }: Props) {
         }
         renderItem={({ item }) => (
           <View style={styles.commentRow}>
-            <View style={[styles.avatar, styles.commentAvatar, { backgroundColor: coverColors[item.avatar_color] ?? coverColors.slate }]} />
+            <Pressable onPress={() => navigation.push('FriendProfile', { handle: item.handle })} hitSlop={4}>
+              <Avatar handle={item.handle} color={item.avatar_color} size={34} />
+            </Pressable>
             <View style={styles.commentBody}>
               <View style={styles.commentMetaRow}>
                 <Text style={styles.commentName}>{item.display_name}</Text>
@@ -308,85 +184,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl,
   },
-  avatar: {
-    borderRadius: 999,
-  },
   postCard: {
-    gap: spacing.sm,
     paddingBottom: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  postAuthorTapArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  postAvatar: {
-    width: 44,
-    height: 44,
-  },
-  postName: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  postHandle: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-    marginTop: 1,
-  },
-  postMenuButton: {
-    padding: 4,
-  },
-  postMessage: {
-    color: discoverColors.titleText,
-    fontSize: 17,
-    lineHeight: 24,
-  },
-  postImage: {
-    height: 220,
-    borderRadius: radii.md,
-    backgroundColor: discoverColors.rowBg,
-  },
-  postGameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: discoverColors.rowBg,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-  },
-  postGameTitle: {
-    flex: 1,
-    color: discoverColors.titleText,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  postTime: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-  },
-  postActions: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    marginTop: spacing.xs,
-  },
-  postActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    padding: 2,
-  },
-  postActionCount: {
-    color: discoverColors.mutedText,
-    fontSize: 13,
-    fontWeight: '600',
   },
   commentsLabel: {
     color: colors.textFaint,
@@ -412,10 +213,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  commentAvatar: {
-    width: 34,
-    height: 34,
   },
   commentBody: {
     flex: 1,

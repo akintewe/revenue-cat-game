@@ -1,6 +1,6 @@
 import type { CatalogGame } from '../../../../data/catalog';
 import type { WishlistEntry } from '../../../wishlist/types';
-import { buildCountdown, coverFileFor, COUNTDOWN_MAX } from '../buildCountdown';
+import { buildCountdown, coverFileFor, COUNTDOWN_MAX, shortTitleFor } from '../buildCountdown';
 
 const now = new Date(2026, 8, 22, 10);
 
@@ -49,6 +49,7 @@ describe('buildCountdown', () => {
     expect(item).toEqual({
       catalogId: 'soon',
       title: 'SOON',
+      shortTitle: 'SOON',
       releaseDate: '2026-10-04',
       coverFile: 'soon.jpg',
       coverUrl: 'https://img.example/soon.jpg',
@@ -65,4 +66,17 @@ describe('buildCountdown', () => {
 
 test('coverFileFor makes a safe file name', () => {
   expect(coverFileFor('igdb:12/3')).toBe('igdb_12_3.jpg');
+});
+
+describe('shortTitleFor', () => {
+  it('uses a subtitle that can stand alone', () => {
+    expect(shortTitleFor('Hollow Knight: Silksong')).toBe('Silksong');
+    expect(shortTitleFor('Metroid Prime 4: Beyond')).toBe('Beyond');
+    expect(shortTitleFor('Marvel 1943 - Rise of Hydra')).toBe('Rise of Hydra');
+  });
+  it('keeps the full title otherwise', () => {
+    expect(shortTitleFor('Hades II')).toBe('Hades II');
+    expect(shortTitleFor('Final Fantasy VII Remake: Part 3')).toBe('Final Fantasy VII Remake: Part 3');
+    expect(shortTitleFor('Deltarune: IV')).toBe('Deltarune: IV');
+  });
 });

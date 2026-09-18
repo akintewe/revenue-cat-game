@@ -68,7 +68,37 @@
           "mode": "production"
         }
       ],
-      "./plugins/withAndroidPackageQueries.js"
+      "./plugins/withAndroidPackageQueries.js",
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "CountdownSmall",
+              "label": "Release countdown",
+              "description": "Days until the next game on your wishlist.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "CountdownMedium",
+              "label": "Release countdown (wide)",
+              "description": "Your next releases as a hand of covers.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "revenueCatApiKeyIos": "",

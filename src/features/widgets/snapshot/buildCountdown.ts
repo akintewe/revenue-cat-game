@@ -13,6 +13,19 @@ export function coverFileFor(catalogId: string): string {
   return `${catalogId.replace(/[^A-Za-z0-9_-]/g, '_')}.jpg`;
 }
 
+/**
+ * "Hollow Knight: Silksong" reads as "Silksong" on a small widget. A subtitle is used only when
+ * it can stand alone: at least four characters, and not a bare edition or sequel number.
+ */
+export function shortTitleFor(title: string): string {
+  const parts = title.split(/:\s+|\s+[–—-]\s+/);
+  const last = parts[parts.length - 1].trim();
+  if (parts.length < 2 || last.length < 4 || /^(part|episode|chapter|vol(ume)?\.?)?\s*[\divxlc]+$/i.test(last)) {
+    return title;
+  }
+  return last;
+}
+
 /** Wishlisted games that are not out yet, soonest first. */
 export function buildCountdown(
   entries: WishlistEntry[],
@@ -29,6 +42,7 @@ export function buildCountdown(
     items.push({
       catalogId: game.id,
       title: game.title,
+      shortTitle: shortTitleFor(game.title),
       releaseDate: game.releaseDate.slice(0, 10),
       coverFile: coverUrl ? coverFileFor(game.id) : null,
       coverUrl,

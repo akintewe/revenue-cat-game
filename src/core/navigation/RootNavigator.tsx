@@ -6,6 +6,7 @@ import { Pressable } from 'react-native';
 import * as Linking from 'expo-linking';
 import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
+import { parseWidgetLink } from '../../features/widgets/links';
 import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
@@ -31,6 +32,12 @@ import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+/** Runs `action` once the navigator can take it; gives up after about three seconds. */
+function whenNavigationReady(action: () => void, attempt = 0) {
+  if (navigationRef.isReady()) action();
+  else if (attempt < 20) setTimeout(() => whenNavigationReady(action, attempt + 1), 150);
+}
 
 /** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
 const MIN_SPLASH_MS = 700;
@@ -76,6 +83,16 @@ export function RootNavigator() {
     if (status !== 'signedIn') return;
 
     function handleUrl(url: string) {
+      const widgetLink = parseWidgetLink(url);
+      if (widgetLink) {
+        // A widget tap can cold-start the app, so the URL may arrive before the navigator mounts.
+        whenNavigationReady(() => {
+          if (widgetLink.kind === 'game') navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
+          else if (widgetLink.kind === 'wishlist') navigationRef.navigate('Tabs', { screen: 'WishlistTab' });
+          else navigationRef.navigate('Paywall');
+        });
+        return;
+      }
       if (!url.includes('link/steam')) return;
       try {
         const { queryParams } = Linking.parse(url);

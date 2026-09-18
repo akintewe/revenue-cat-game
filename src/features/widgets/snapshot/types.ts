@@ -13,6 +13,8 @@ export const APP_GROUP = 'group.com.nathanakin.revenuecatgame';
 export type CountdownItem = {
   catalogId: string;
   title: string;
+  /** The subtitle of a "Series: Subtitle" name, for the small widget's one-line label. */
+  shortTitle: string;
   /** ISO date, YYYY-MM-DD. The widgets compute "days left" from this, so an old snapshot stays right. */
   releaseDate: string;
   /** File name inside WIDGET_COVER_DIR (iOS). Null when the game has no cover art. */

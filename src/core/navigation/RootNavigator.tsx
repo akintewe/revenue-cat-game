@@ -88,6 +88,11 @@ export function RootNavigator() {
         // A widget tap can cold-start the app, so the URL may arrive before the navigator mounts.
         whenNavigationReady(() => {
           if (widgetLink.kind === 'game') navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
+          else if (widgetLink.kind === 'start') {
+            // The roulette's Start: the game leaves the backlog, then its page opens.
+            void useLibraryStore.getState().setStatus(widgetLink.catalogId, 'playing');
+            navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
+          }
           else if (widgetLink.kind === 'wishlist') navigationRef.navigate('Tabs', { screen: 'WishlistTab' });
           else navigationRef.navigate('Paywall');
         });

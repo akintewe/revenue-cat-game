@@ -2,7 +2,9 @@ import type { CatalogGame } from '../../../data/catalog';
 import { resolveCatalogGame } from '../../../services/catalog/unifiedCatalog';
 import { getCustomerInfo, hasActiveEntitlement } from '../../../services/revenuecat/purchases';
 import { PLUS_ENTITLEMENT_ID } from '../../../shared/constants/app';
+import { useLibraryStore } from '../../library/store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
+import { ROULETTE_POOL_MAX } from '../snapshot/buildRoulette';
 import { buildWidgetSnapshot, snapshotsEqual } from '../snapshot/buildWidgetSnapshot';
 import { localDayKey } from '../snapshot/days';
 import type { WidgetSnapshot } from '../snapshot/types';
@@ -34,17 +36,26 @@ async function resolveGames(ids: string[]): Promise<Record<string, CatalogGame |
 async function publishOnce(signedIn: boolean): Promise<void> {
   const now = new Date();
   const wishlist = signedIn ? useWishlistStore.getState().entries : [];
-  const [games, isPlus] = await Promise.all([
-    resolveGames(wishlist.map((entry) => entry.catalogId)),
-    signedIn ? readIsPlus() : Promise.resolve(false),
+  const library = signedIn ? useLibraryStore.getState().entries : [];
+
+  // A library can hold hundreds of games. Only the ones a widget can show are resolved:
+  // the wishlist, the games in play, and the newest backlog games (a few spare, in case
+  // some no longer resolve).
+  const backlog = library.filter((entry) => entry.status === 'backlog').sort((a, b) => b.addedAt - a.addedAt);
+  const ids = new Set([
+    ...wishlist.map((entry) => entry.catalogId),
+    ...library.filter((entry) => entry.status === 'playing').map((entry) => entry.catalogId),
+    ...backlog.slice(0, ROULETTE_POOL_MAX + 4).map((entry) => entry.catalogId),
   ]);
-  const snapshot = buildWidgetSnapshot({ wishlist, games, isPlus, now });
+
+  const [games, isPlus] = await Promise.all([resolveGames([...ids]), signedIn ? readIsPlus() : Promise.resolve(false)]);
+  const snapshot = buildWidgetSnapshot({ wishlist, library, games, isPlus, now });
 
   // Same content on the same day renders the same widgets: do not wake WidgetKit for nothing.
   const dayKey = localDayKey(now);
   if (snapshotsEqual(lastPublished, snapshot) && dayKey === lastDayKey) return;
 
-  await cacheCovers(snapshot.countdown.items);
+  await cacheCovers([...snapshot.countdown.items, ...snapshot.upNext.items, ...snapshot.roulette.pool]);
   await writeSnapshot(JSON.stringify(snapshot));
   reloadWidgets();
   lastPublished = snapshot;

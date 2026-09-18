@@ -1,14 +1,15 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useAuthStore } from '../../auth/store/useAuthStore';
+import { useLibraryStore } from '../../library/store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
 import { publishWidgetSnapshot } from './publishWidgetSnapshot';
 
 const DEBOUNCE_MS = 500;
 
 /**
- * Keeps the home screen widgets in step with the app: publishes after the wishlist or the
- * session changes (debounced), and each time the app comes to the foreground.
+ * Keeps the home screen widgets in step with the app: publishes after the wishlist, the library or
+ * the session changes (debounced), and each time the app comes to the foreground.
  * Mount once, at the root.
  */
 export function useWidgetPublisher(): void {
@@ -28,6 +29,9 @@ export function useWidgetPublisher(): void {
     const stopWishlist = useWishlistStore.subscribe((state, previous) => {
       if (state.entries !== previous.entries) schedule();
     });
+    const stopLibrary = useLibraryStore.subscribe((state, previous) => {
+      if (state.entries !== previous.entries) schedule();
+    });
     const stopAuth = useAuthStore.subscribe((state, previous) => {
       if (state.status !== previous.status) schedule();
     });
@@ -39,6 +43,7 @@ export function useWidgetPublisher(): void {
     return () => {
       if (timer) clearTimeout(timer);
       stopWishlist();
+      stopLibrary();
       stopAuth();
       appState.remove();
     };

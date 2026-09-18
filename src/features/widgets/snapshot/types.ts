@@ -25,10 +25,44 @@ export type CountdownItem = {
   bleed: string;
 };
 
+export type UpNextItem = {
+  catalogId: string;
+  title: string;
+  hoursPlayed: number | null;
+  timeToBeatHours: number | null;
+  /** 0..1, capped. Null when hours or time to beat is unknown. */
+  progress: number | null;
+  /** "31h · about halfway". The builder writes the sentence, the widgets print it. */
+  summary: string;
+  /** "31h played · about 60h to beat" */
+  detail: string;
+  coverFile: string | null;
+  coverUrl: string | null;
+  bleed: string;
+};
+
+export type RouletteItem = {
+  catalogId: string;
+  title: string;
+  /** "about 22h · in your backlog since March" */
+  detail: string;
+  coverFile: string | null;
+  coverUrl: string | null;
+  bleed: string;
+};
+
+/** Written by the widgets themselves (iOS App Intent, Android click handler), not by the app. */
+export const WIDGET_ROULETTE_KEY = 'widgetRoulette';
+export const FREE_ROLLS_PER_DAY = 1;
+
 export type WidgetSnapshot = {
   version: typeof WIDGET_SNAPSHOT_VERSION;
   /** Epoch ms. */
   generatedAt: number;
   isPlus: boolean;
   countdown: { items: CountdownItem[] };
+  /** Games in play, most hours first. `backlogCount` feeds the empty state. */
+  upNext: { items: UpNextItem[]; backlogCount: number };
+  /** The pool the widget rolls from. The pick and the roll count live under WIDGET_ROULETTE_KEY. */
+  roulette: { pool: RouletteItem[]; freeRollsPerDay: number };
 };

@@ -1,7 +1,8 @@
 import { dim, parseSnapshot, shortDate, upcoming } from '../model';
 
 const item = { catalogId: 'a', title: 'A', shortTitle: 'A', releaseDate: '2026-10-04', coverFile: null, coverUrl: null, bleed: '#2FB6A8' };
-const snapshot = { version: 1 as const, generatedAt: 0, isPlus: false, countdown: { items: [item, { ...item, catalogId: 'old', releaseDate: '2026-09-01' }] } };
+const snapshot = { version: 1 as const, generatedAt: 0, isPlus: false, countdown: { items: [item, { ...item, catalogId: 'old', releaseDate: '2026-09-01' }] },
+  upNext: { items: [], backlogCount: 0 }, roulette: { pool: [], freeRollsPerDay: 1 } };
 
 describe('parseSnapshot', () => {
   it('reads a valid snapshot', () => {

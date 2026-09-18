@@ -9,7 +9,12 @@ export function parseSnapshot(json: string | null): WidgetSnapshot | null {
   try {
     const value = JSON.parse(json) as Partial<WidgetSnapshot> | null;
     if (!value || value.version !== WIDGET_SNAPSHOT_VERSION || !Array.isArray(value.countdown?.items)) return null;
-    return value as WidgetSnapshot;
+    // Sections added after the first release are optional in a stored snapshot.
+    return {
+      ...(value as WidgetSnapshot),
+      upNext: value.upNext ?? { items: [], backlogCount: 0 },
+      roulette: value.roulette ?? { pool: [], freeRollsPerDay: 1 },
+    };
   } catch {
     return null;
   }

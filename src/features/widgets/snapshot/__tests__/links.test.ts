@@ -6,6 +6,10 @@ describe('parseWidgetLink', () => {
     expect(parseWidgetLink('prysm://game/igdb%3A12')).toEqual({ kind: 'game', catalogId: 'igdb:12' });
     expect(parseWidgetLink('prysm:///game/x?from=widget')).toEqual({ kind: 'game', catalogId: 'x' });
   });
+  it('reads a start link', () => {
+    expect(parseWidgetLink('prysm://start/hades-ii')).toEqual({ kind: 'start', catalogId: 'hades-ii' });
+    expect(parseWidgetLink('prysm://start')).toBeNull();
+  });
   it('reads the wishlist and paywall links', () => {
     expect(parseWidgetLink('prysm://wishlist')).toEqual({ kind: 'wishlist' });
     expect(parseWidgetLink('prysm://paywall/')).toEqual({ kind: 'paywall' });

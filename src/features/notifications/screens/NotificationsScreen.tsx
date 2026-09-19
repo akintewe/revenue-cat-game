@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, coverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { Avatar } from '../../../shared/components/Avatar';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { timeAgo } from '../../../shared/utils/formatDate';
@@ -131,6 +132,8 @@ export function NotificationsScreen({ navigation }: Props) {
               <View style={[styles.avatar, { backgroundColor: coverColors[item.avatar_color] ?? coverColors.slate }]}>
                 {item.kind === 'game_release' && item.game_cover ? (
                   <Image source={{ uri: item.game_cover }} style={styles.avatarCover} contentFit="cover" />
+                ) : item.handle ? (
+                  <Avatar handle={item.handle} color={item.avatar_color} size={40} />
                 ) : null}
                 <View style={styles.avatarBadge}>
                   <Ionicons name={iconFor(item.kind)} size={11} color={colors.onAccent} />

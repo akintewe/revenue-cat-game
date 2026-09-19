@@ -41,6 +41,9 @@ yarn-error.*
 /ios
 /android
 
+# Claude Code worktrees
+.claude/worktrees/
+
 # local expo module native build output
 modules/**/android/build
 modules/**/android/.cxx

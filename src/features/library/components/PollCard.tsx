@@ -18,14 +18,14 @@ export function PollCard({ poll, onVote }: { poll: Poll; onVote: (optionId: stri
     (best, o) => (o.votes > (best?.votes ?? -1) ? o : best),
     null as (typeof poll.options)[number] | null,
   )?.id;
-  const hasVoted = poll.myVoteId != null;
+  const hasVoted = poll.my_option_id != null;
 
   return (
     <View style={styles.root}>
       {poll.options.map((option) => {
         const pct = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
         const isLeading = option.id === leadingId && totalVotes > 0;
-        const isMine = option.id === poll.myVoteId;
+        const isMine = option.id === poll.my_option_id;
         return (
           <Pressable
             key={option.id}
@@ -49,7 +49,7 @@ export function PollCard({ poll, onVote }: { poll: Poll; onVote: (optionId: stri
       })}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          {totalVotes.toLocaleString()} {totalVotes === 1 ? 'Vote' : 'Votes'} · {timeRemaining(poll.endsAt)}
+          {totalVotes.toLocaleString()} {totalVotes === 1 ? 'Vote' : 'Votes'} · {timeRemaining(poll.ends_at)}
         </Text>
       </View>
     </View>

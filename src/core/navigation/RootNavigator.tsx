@@ -6,6 +6,8 @@ import { Pressable } from 'react-native';
 import * as Linking from 'expo-linking';
 import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
+import { parseWidgetLink } from '../../features/widgets/links';
+import { dispatchPlatformLink, parsePlatformLink } from '../../services/social/platformLink';
 import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
 import { VagueSearchScreen } from '../../features/vagueSearch/screens/VagueSearchScreen';
@@ -25,7 +27,6 @@ import { NotificationsScreen } from '../../features/notifications/screens/Notifi
 import { EditProfileScreen } from '../../features/profile/screens/EditProfileScreen';
 import { DeleteAccountScreen } from '../../features/profile/screens/DeleteAccountScreen';
 import { LoginScreen } from '../../features/auth/screens/LoginScreen';
-import { SignupScreen } from '../../features/auth/screens/SignupScreen';
 import { OnboardingScreen } from '../../features/onboarding/screens/OnboardingScreen';
 import { useOnboardingStore } from '../../features/onboarding/store/useOnboardingStore';
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
@@ -39,6 +40,12 @@ import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+/** Runs `action` once the navigator can take it; gives up after about three seconds. */
+function whenNavigationReady(action: () => void, attempt = 0) {
+  if (navigationRef.isReady()) action();
+  else if (attempt < 20) setTimeout(() => whenNavigationReady(action, attempt + 1), 150);
+}
 
 /** Auth often resolves near-instantly from a cached session — hold the splash a beat so it's actually seen. */
 const MIN_SPLASH_MS = 700;
@@ -88,21 +95,29 @@ export function RootNavigator() {
     if (status !== 'signedIn') return;
 
     function handleUrl(url: string) {
-      if (!url.includes('link/steam')) return;
-      try {
-        const { queryParams } = Linking.parse(url);
-        const linkStatus = queryParams?.status;
-        const nonce = queryParams?.nonce;
-        if (
-          (linkStatus === 'ok' || linkStatus === 'failed' || linkStatus === 'expired') &&
-          typeof nonce === 'string' &&
-          navigationRef.isReady()
-        ) {
-          navigationRef.navigate('SteamLink', { status: linkStatus, nonce });
-        }
-      } catch (err) {
-        console.warn('[steam-link] failed to parse redirect url', err);
+      const widgetLink = parseWidgetLink(url);
+      if (widgetLink) {
+        // A widget tap can cold-start the app, so the URL may arrive before the navigator mounts.
+        whenNavigationReady(() => {
+          if (widgetLink.kind === 'game') navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
+          else if (widgetLink.kind === 'start') {
+            // The roulette's Start: the game leaves the backlog, then its page opens.
+            void useLibraryStore.getState().setStatus(widgetLink.catalogId, 'playing');
+            navigationRef.navigate('GameDetail', { catalogId: widgetLink.catalogId });
+          }
+          else if (widgetLink.kind === 'wishlist') navigationRef.navigate('Tabs', { screen: 'WishlistTab' });
+          else if (widgetLink.kind === 'library') navigationRef.navigate('Tabs', { screen: 'LibraryTab' });
+          else navigationRef.navigate('Paywall');
+        });
+        return;
       }
+      const platformLink = parsePlatformLink(url);
+      if (!platformLink) return;
+      // Onboarding runs the import inside its own step, so it takes the redirect itself.
+      if (dispatchPlatformLink(platformLink)) return;
+      // Anywhere else, only Steam has a result screen. Xbox links are started from onboarding only.
+      if (platformLink.platform !== 'steam') return;
+      whenNavigationReady(() => navigationRef.navigate('SteamLink', { status: platformLink.status, nonce: platformLink.nonce }));
     }
 
     Linking.getInitialURL().then((url) => {
@@ -170,13 +185,11 @@ export function RootNavigator() {
         }}
       >
         {status === 'signedOut' ? (
-          <Stack.Group screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Signup" component={SignupScreen} />
-          </Stack.Group>
+          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         ) : (
           <Stack.Group>
             <Stack.Screen name="Tabs" component={TabNavigator} options={{ headerShown: false }} />
+            {/* Pushed as a card, not a modal: iOS refuses swipe-to-dismiss on fullScreenModal. */}
             <Stack.Screen
               name="Onboarding"
               component={OnboardingScreen}
@@ -185,7 +198,12 @@ export function RootNavigator() {
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}
-              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_bottom',
+                gestureDirection: 'vertical',
+              }}
             />
             <Stack.Screen
               name="VagueSearch"
@@ -216,7 +234,13 @@ export function RootNavigator() {
             <Stack.Screen
               name="ComposePost"
               component={ComposePostScreen}
-              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+              // A full-screen card, like AddGame: a page sheet shifts the keyboard maths.
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_bottom',
+                gestureDirection: 'vertical',
+              }}
             />
             <Stack.Screen
               name="FollowList"

@@ -1,26 +1,21 @@
 import { supabase } from '../supabase/client';
 import type { CoverColorKey } from '../../data/catalog';
 
-/** Client-chosen post topic. No backend column yet — set only on posts composed this session. */
 export type PostCategory = 'trophies' | 'questions' | 'memes';
 
-export type PollOption = {
-  id: string;
-  label: string;
-  votes: number;
+export type PollVoter = { handle: string; avatar_color: CoverColorKey };
+
+export type PollOption = { id: string; label: string; votes: number; voters: PollVoter[] };
+
+export type Poll = {
+  ends_at: string;
+  total_votes: number;
+  my_option_id: string | null;
+  options: PollOption[];
 };
 
-/**
- * A poll attached to a post. There's no backend poll table yet, so this only exists on
- * posts composed in the current session — voting is optimistic local state, and neither
- * the poll nor any vote is persisted or visible to anyone else until the backend ships
- * real poll support (see the onboarding-backend-style ask this should eventually get).
- */
-export type Poll = {
-  options: PollOption[];
-  endsAt: string;
-  myVoteId: string | null;
-};
+/** Why the post is in the caller's feed. `profile` is a one-author feed for a profile page. */
+export type FeedReason = 'self' | 'following' | 'repost' | 'network' | 'popular' | 'profile';
 
 export type FeedPost = {
   id: string;
@@ -33,19 +28,29 @@ export type FeedPost = {
   handle: string;
   display_name: string;
   avatar_color: CoverColorKey;
+  category: PostCategory | null;
   game_id: string | null;
   game_title: string | null;
   game_cover: string | null;
+  /** Wide IGDB screenshot. `null`: not fetched yet. `''`: IGDB has none, so use the cover. */
+  game_artwork: string | null;
+  game_year: number | null;
+  game_genres: string[] | null;
+  /** IGDB critic score on a 0–5 scale, one decimal. */
+  game_rating: number | null;
+  /** Platform families, e.g. `playstation`, `xbox`, `nintendo`, `pc`, `mobile`. */
+  game_platforms: string[] | null;
+  poll: Poll | null;
   like_count: number;
   comment_count: number;
+  repost_count: number;
+  share_count: number;
   liked_by_me: boolean;
-  /** Local-only — see PostCategory. Always undefined on posts loaded from the server. */
-  category?: PostCategory | null;
-  /** Local-only — see Poll. Always undefined on posts loaded from the server. */
-  poll?: Poll | null;
-  /** Local-only optimistic repost count — no backend repost table yet. */
-  repost_count?: number;
-  reposted_by_me?: boolean;
+  reposted_by_me: boolean;
+  /** Set when someone the caller follows reposted a post by someone the caller does not follow. */
+  reposted_by_handle: string | null;
+  reposted_by_name: string | null;
+  reason: FeedReason;
 };
 
 export async function fetchFeed(params?: {
@@ -86,25 +91,66 @@ export async function findPostById(handle: string, postId: string, maxPages = 4)
   return null;
 }
 
-/** Returns the inserted row's id/created_at so callers can build a real optimistic post without a refetch. */
-export async function createPost(
-  authorId: string,
-  body: string,
-  opts?: { linkUrl?: string; gameId?: string; imagePath?: string },
-): Promise<{ id: string; created_at: string }> {
-  const { data, error } = await supabase
-    .from('posts')
-    .insert({
-      author_id: authorId,
-      body,
-      link_url: opts?.linkUrl ?? null,
-      game_id: opts?.gameId ?? null,
-      image_path: opts?.imagePath ?? null,
-    })
-    .select('id, created_at')
-    .single();
+export type NewPost = {
+  body: string;
+  category?: PostCategory | null;
+  gameId?: string | null;
+  imagePath?: string | null;
+  linkUrl?: string | null;
+  /** 2–4 labels. The post body is the poll question. */
+  pollOptions?: string[];
+  pollHours?: number;
+};
+
+/** Creates the post, and its poll when there is one, in one transaction. Returns the new post id. */
+export async function createPost(post: NewPost): Promise<string> {
+  const { data, error } = await supabase.rpc('shelf_create_post', {
+    p_body: post.body,
+    p_category: post.category ?? null,
+    p_game_id: post.gameId ?? null,
+    p_image_path: post.imagePath ?? null,
+    p_link_url: post.linkUrl ?? null,
+    p_poll_options: post.pollOptions && post.pollOptions.length > 0 ? post.pollOptions : null,
+    p_poll_hours: post.pollHours ?? 24,
+  });
   if (error) throw error;
-  return data;
+  return data as string;
+}
+
+/** Votes, or moves an earlier vote. Returns the poll as the feed shows it. */
+export async function votePoll(postId: string, optionId: string): Promise<Poll> {
+  const { data, error } = await supabase.rpc('shelf_vote_poll', { p_post_id: postId, p_option_id: optionId });
+  if (error) throw error;
+  return data as Poll;
+}
+
+export async function repostPost(userId: string, postId: string): Promise<void> {
+  const { error } = await supabase.from('post_reposts').insert({ post_id: postId, user_id: userId });
+  if (error && error.code !== '23505') throw error;
+}
+
+export async function unrepostPost(userId: string, postId: string): Promise<void> {
+  const { error } = await supabase.from('post_reposts').delete().eq('post_id', postId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+/** Counts one share out of the app. */
+export async function recordShare(userId: string, postId: string): Promise<void> {
+  const { error } = await supabase.from('post_shares').insert({ post_id: postId, user_id: userId });
+  if (error) throw error;
+}
+
+/**
+ * Asks the game-artwork function to fetch wide art for games that have none yet.
+ * Returns id → URL. An empty string means IGDB has no art for that game.
+ */
+export async function requestGameArtwork(gameIds: string[]): Promise<Record<string, string>> {
+  if (gameIds.length === 0) return {};
+  const { data, error } = await supabase.functions.invoke<{ artwork: Record<string, string> }>('game-artwork', {
+    body: { gameIds },
+  });
+  if (error) throw error;
+  return data?.artwork ?? {};
 }
 
 const POST_IMAGES_BUCKET = 'post-images';

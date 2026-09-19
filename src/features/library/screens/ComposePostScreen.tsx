@@ -174,23 +174,31 @@ export function ComposePostScreen({ navigation, route }: Props) {
         gameId = isUuid(selectedGame.id) ? selectedGame.id : (await resolveRemoteId(selectedGame.title)) ?? undefined;
       }
 
-      const inserted = await createPost(userId, trimmedBody, { imagePath, gameId });
+      const postId = await createPost({
+        body: trimmedBody,
+        category,
+        gameId,
+        imagePath,
+        pollOptions: attachment === 'poll' && validPollOptions.length >= 2 ? validPollOptions : undefined,
+        pollHours: POLL_DURATION_MS / (60 * 60 * 1000),
+      });
 
       let poll: Poll | null = null;
       if (attachment === 'poll' && validPollOptions.length >= 2) {
         poll = {
-          options: validPollOptions.map((label, i) => ({ id: `${inserted.id}-opt-${i}`, label, votes: 0 })),
-          endsAt: new Date(Date.now() + POLL_DURATION_MS).toISOString(),
-          myVoteId: null,
+          options: validPollOptions.map((label, i) => ({ id: `${postId}-opt-${i}`, label, votes: 0, voters: [] })),
+          ends_at: new Date(Date.now() + POLL_DURATION_MS).toISOString(),
+          total_votes: 0,
+          my_option_id: null,
         };
       }
 
       const optimisticPost: FeedPost = {
-        id: inserted.id,
+        id: postId,
         body: trimmedBody,
         link_url: null,
         image_path: imagePath ?? null,
-        created_at: inserted.created_at,
+        created_at: new Date().toISOString(),
         edited_at: null,
         author_id: userId,
         handle: profile?.handle ?? '',
@@ -199,13 +207,22 @@ export function ComposePostScreen({ navigation, route }: Props) {
         game_id: gameId ?? null,
         game_title: selectedGame?.title ?? null,
         game_cover: selectedGame?.coverImageUrl ?? null,
+        game_artwork: null,
+        game_year: null,
+        game_genres: null,
+        game_rating: null,
+        game_platforms: null,
         like_count: 0,
         comment_count: 0,
+        share_count: 0,
         liked_by_me: false,
         category,
         poll,
         repost_count: 0,
         reposted_by_me: false,
+        reposted_by_handle: null,
+        reposted_by_name: null,
+        reason: 'self',
       };
 
       route.params.onPostCreated(optimisticPost);

@@ -48,16 +48,19 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-lockup.png",
-          "imageWidth": 220,
-          "backgroundColor": "#090909",
-          "dark": {
-            "image": "./assets/splash-lockup.png",
-            "backgroundColor": "#090909"
-          }
+          "image": "./assets/splash-pyramid.png",
+          "imageWidth": 34,
+          "resizeMode": "contain",
+          "backgroundColor": "#FD5021"
         }
       ],
       "expo-share-intent",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.610135379378-vh79ejfl909emvu1sv23d0fn1i8qo46u"
+        }
+      ],
       "expo-web-browser",
       [
         "onesignal-expo-plugin",
@@ -66,11 +69,87 @@
           "disableLocation": true
         }
       ],
-      "./plugins/withAndroidPackageQueries.js"
+      "./plugins/withAndroidPackageQueries.js",
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "CountdownSmall",
+              "label": "Release countdown",
+              "description": "Days until the next game on your wishlist.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "CountdownMedium",
+              "label": "Release countdown (wide)",
+              "description": "Your next releases as a hand of covers.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "UpNextSmall",
+              "label": "Up next",
+              "description": "The game you are playing.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "UpNextMedium",
+              "label": "Up next (wide)",
+              "description": "The game you are playing, and how far along you are.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "RouletteSmall",
+              "label": "Roll the backlog",
+              "description": "One tap picks tonight's game.",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "RouletteMedium",
+              "label": "Roll the backlog (wide)",
+              "description": "One tap picks tonight's game from your backlog.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "revenueCatApiKeyIos": "test_uShePXvPrgYocgrGDyQRzrQWHke",
       "revenueCatApiKeyAndroid": "test_uShePXvPrgYocgrGDyQRzrQWHke",
+      "googleWebClientId": "610135379378-mh9odm2nv1sb60s0hrq5nmr68ckbgs9u.apps.googleusercontent.com",
+      "googleIosClientId": "610135379378-vh79ejfl909emvu1sv23d0fn1i8qo46u.apps.googleusercontent.com",
       "eas": {
         "projectId": "4c28ff2a-446c-4a5f-9499-9050d7a8489f"
       }

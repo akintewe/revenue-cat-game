@@ -5,13 +5,13 @@ import type { FeedPost } from '../../services/social/feed';
 import type { Stamp } from '../../features/passport/types';
 
 export type TabParamList = {
-  LibraryTab: { openBrowse?: boolean } | undefined;
+  LibraryTab: { openBrowse?: boolean; tab?: 'games' | 'friends' } | undefined;
   WishlistTab: undefined;
   ProfileTab: undefined;
 };
 
 export type RootStackParamList = {
-  Tabs: { screen: 'LibraryTab'; params?: TabParamList['LibraryTab'] } | undefined;
+  Tabs: { [K in keyof TabParamList]: { screen: K; params?: TabParamList[K] } }[keyof TabParamList] | undefined;
   AddGame: undefined;
   VagueSearch: undefined;
   GameDetail: { catalogId: string };
@@ -25,14 +25,13 @@ export type RootStackParamList = {
   SteamLink: { status: 'ok' | 'failed' | 'expired'; nonce: string };
   FriendProfile: { handle: string };
   PostDetail: { post: FeedPost; onPostUpdated?: (post: FeedPost) => void; onPostDeleted?: (postId: string) => void };
-  ComposePost: { onPostCreated: (post: FeedPost) => void };
   FollowList: { handle: string; mode: 'followers' | 'following' };
   FriendSearch: undefined;
+  ComposePost: { onPostCreated: (post: FeedPost) => void };
   Notifications: undefined;
   EditProfile: undefined;
   DeleteAccount: undefined;
   Login: undefined;
-  Signup: undefined;
   Onboarding: undefined;
 };
 

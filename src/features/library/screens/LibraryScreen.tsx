@@ -258,12 +258,13 @@ export function LibraryScreen({ navigation, route }: Props) {
   }
 
   function handleVotePoll(post: FeedPost, optionId: string) {
-    if (!post.poll || post.poll.myVoteId) return;
+    if (!post.poll || post.poll.my_option_id) return;
     const poll = post.poll;
     updateLocalPost(post.id, {
       poll: {
         ...poll,
-        myVoteId: optionId,
+        my_option_id: optionId,
+        total_votes: poll.total_votes + 1,
         options: poll.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
       },
     });

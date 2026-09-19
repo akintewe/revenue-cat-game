@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, coverColors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { colors, discoverColors, radii, spacing, typography } from '../../../shared/theme/theme';
+import { Avatar } from '../../../shared/components/Avatar';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { followUser, searchUsers, unfollowUser, type ProfileSummary } from '../../../services/social/profiles';
@@ -112,7 +113,7 @@ export function FriendSearchScreen({ navigation }: Props) {
             style={styles.row}
             onPress={() => navigation.navigate('FriendProfile', { handle: item.handle })}
           >
-            <View style={[styles.avatar, { backgroundColor: coverColors[item.avatar_color] ?? coverColors.slate }]} />
+            <Avatar handle={item.handle} color={item.avatar_color} size={44} />
             <View style={styles.rowBody}>
               <Text style={styles.rowName} numberOfLines={1}>
                 {item.display_name}
@@ -175,11 +176,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.sm + 2,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
   },
   rowBody: {
     flex: 1,

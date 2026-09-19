@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -36,10 +36,13 @@ import type { SearchDevice } from '../../../services/catalog/remoteCatalog';
 import { isUuid } from '../../../shared/utils/id';
 import type { CatalogGame } from '../../../data/catalog';
 import type { RootScreenProps } from '../../../core/navigation/types';
+import { ImportStep } from '../components/ImportStep';
+import { importedEntries, PlayingNowStep } from '../components/PlayingNowStep';
+import { importSourcesFor, nextStep, previousStep, STEPS, type Step } from '../importSources';
+import { useImportRunner } from '../useImportRunner';
 
 type Props = RootScreenProps<'Onboarding'>;
 
-const STEP_COUNT = 5;
 const NAME_MAX = 20;
 const USERNAME_MAX = 20;
 const MIN_GAMES = 3;
@@ -58,7 +61,7 @@ const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
 export function OnboardingScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<Step>('name');
   const stepAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -103,7 +106,7 @@ export function OnboardingScreen({ navigation }: Props) {
     };
   }, [username, usernameValid]);
 
-  // Step 3 — games
+  // Games step (shown after platforms and import)
   const [gameQuery, setGameQuery] = useState('');
   const [gameResults, setGameResults] = useState<CatalogGame[]>([]);
   const [popularGames, setPopularGames] = useState<CatalogGame[]>([]);
@@ -141,7 +144,7 @@ export function OnboardingScreen({ navigation }: Props) {
     });
   }
 
-  // Step 4 — platforms, written to profiles.platforms on continue
+  // Platforms step — written to profiles.platforms on continue
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<SearchDevice>>(new Set());
 
   function togglePlatform(value: SearchDevice) {
@@ -166,7 +169,7 @@ export function OnboardingScreen({ navigation }: Props) {
 
   // Fetched once the user reaches step 5 — ranking reflects the games/platforms they just picked.
   useEffect(() => {
-    if (step !== 4 || suggestedUsers.length > 0) return;
+    if (step !== 'friends' || suggestedUsers.length > 0) return;
     setSuggestedLoading(true);
     fetchSuggestedUsers(20)
       .then(setSuggestedUsers)
@@ -228,18 +231,31 @@ export function OnboardingScreen({ navigation }: Props) {
   // Navigation between steps
   function blockedShake(message: string) {
     hapticError();
-    if (step === 0) setNameTouched(true);
+    if (step === 'name') setNameTouched(true);
     // A lightweight nudge is enough here — the inline error text already explains why.
     console.warn('[onboarding] blocked:', message);
   }
 
+  // Platforms come before games now: the choice decides which imports the next step offers.
+  const importSources = useMemo(() => importSourcesFor(selectedPlatforms, Platform.OS), [selectedPlatforms]);
+  const hasImports = importSources.length > 0;
+  const importRunner = useImportRunner();
+  const libraryEntries = useLibraryStore((state) => state.entries);
+  // Once an import has filled the library, the games step asks what is in play instead.
+  const hasImported = useMemo(() => importedEntries(libraryEntries).length > 0, [libraryEntries]);
+
+  function goNext() {
+    const next = nextStep(step, hasImports);
+    if (next) setStep(next);
+    else finishOnboarding();
+  }
+
   async function handleContinue() {
-    if (step === 0) {
+    if (step === 'name') {
       if (!nameValid) return blockedShake('name too short');
-      setStep(1);
-      return;
+      return goNext();
     }
-    if (step === 1) {
+    if (step === 'username') {
       if (!usernameValid || usernameStatus === 'taken' || usernameStatus === 'checking') {
         return blockedShake('username not ready');
       }
@@ -253,39 +269,32 @@ export function OnboardingScreen({ navigation }: Props) {
           }
         }
       }
-      setStep(2);
-      return;
+      return goNext();
     }
-    if (step === 2) {
+    if (step === 'platforms' && selectedPlatforms.size < 1) return blockedShake('no platform chosen');
+    if (step === 'platforms' && userId && selectedPlatforms.size > 0) {
+      updateMyProfile(userId, { platforms: Array.from(selectedPlatforms) }).catch((err) =>
+        console.warn('[onboarding] platforms update failed', err),
+      );
+    }
+    if (step === 'games' && !hasImported) {
       if (selectedGames.size < MIN_GAMES) return blockedShake('not enough games');
       for (const game of selectedGames.values()) {
         const catalogId = isUuid(game.id) ? game.id : await resolveRemoteId(game.title);
         if (catalogId) useLibraryStore.getState().addGame(catalogId);
       }
-      setStep(3);
-      return;
     }
-    if (step === 3) {
-      if (userId && selectedPlatforms.size > 0) {
-        updateMyProfile(userId, { platforms: Array.from(selectedPlatforms) }).catch((err) =>
-          console.warn('[onboarding] platforms update failed', err),
-        );
-      }
-      setStep(4);
-      return;
-    }
-    finishOnboarding();
+    // The import step never blocks: an import that is still running finishes in the background.
+    goNext();
   }
 
   function handleSkip() {
     hapticSelection();
-    if (step === 2) return setStep(3);
-    if (step === 3) return setStep(4);
+    goNext();
   }
 
   function handleBack() {
-    if (step === 0) return;
-    setStep((s) => s - 1);
+    setStep((current) => previousStep(current, hasImports));
   }
 
   function finishOnboarding() {
@@ -294,26 +303,30 @@ export function OnboardingScreen({ navigation }: Props) {
   }
 
   const canContinue =
-    step === 0
+    step === 'name'
       ? nameValid
-      : step === 1
+      : step === 'username'
         ? usernameValid && usernameStatus === 'available'
-        : step === 2
-          ? selectedGames.size >= MIN_GAMES
-          : step === 3
-            ? selectedPlatforms.size >= 1
-            : followedCount >= 1;
+        : step === 'platforms'
+          ? selectedPlatforms.size >= 1
+          : step === 'import'
+            ? true
+            : step === 'games'
+              ? hasImported || selectedGames.size >= MIN_GAMES
+              : followedCount >= 1;
 
-  const showSkip = step >= 2 && step <= 3;
-  const showBack = step >= 1;
+  const showSkip = step === 'platforms' || step === 'import' || step === 'games';
+  const showBack = step !== 'name';
+  // The import step has a dot only when it will be shown.
+  const visibleSteps = STEPS.filter((name) => name !== 'import' || hasImports);
 
   return (
     <View style={styles.root}>
       <ScreenBackground />
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.progressRow}>
-          {Array.from({ length: STEP_COUNT }).map((_, i) => (
-            <View key={i} style={[styles.progressDot, i === step && styles.progressDotActive]} />
+          {visibleSteps.map((name) => (
+            <View key={name} style={[styles.progressDot, name === step && styles.progressDotActive]} />
           ))}
         </View>
         {showSkip && (
@@ -326,16 +339,19 @@ export function OnboardingScreen({ navigation }: Props) {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        enabled={step === 0 || step === 1}
+        enabled={step === 'name' || step === 'username' || step === 'import'}
       >
         <Animated.View style={[styles.flex, { opacity: stepAnim }]}>
-          {step === 0 && (
+          {step === 'name' && (
             <NameStep name={name} onChangeName={setName} onBlur={() => setNameTouched(true)} error={nameError} />
           )}
-          {step === 1 && (
+          {step === 'username' && (
             <UsernameStep username={username} onChangeUsername={setUsername} status={usernameStatus} />
           )}
-          {step === 2 && (
+          {step === 'platforms' && <PlatformsStep selected={selectedPlatforms} onToggle={togglePlatform} />}
+          {step === 'import' && <ImportStep sources={importSources} runner={importRunner} />}
+          {step === 'games' && hasImported && <PlayingNowStep />}
+          {step === 'games' && !hasImported && (
             <GamesStep
               query={gameQuery}
               onChangeQuery={setGameQuery}
@@ -344,8 +360,7 @@ export function OnboardingScreen({ navigation }: Props) {
               onToggle={toggleGame}
             />
           )}
-          {step === 3 && <PlatformsStep selected={selectedPlatforms} onToggle={togglePlatform} />}
-          {step === 4 && (
+          {step === 'friends' && (
             <FriendsStep
               query={friendQuery}
               onChangeQuery={setFriendQuery}
@@ -374,7 +389,7 @@ export function OnboardingScreen({ navigation }: Props) {
             ]}
             onPress={handleContinue}
           >
-            <Text style={styles.continueButtonText}>{step === STEP_COUNT - 1 ? 'Done' : 'Continue'}</Text>
+            <Text style={styles.continueButtonText}>{step === 'friends' ? 'Done' : 'Continue'}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

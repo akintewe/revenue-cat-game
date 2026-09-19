@@ -1,22 +1,93 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Image, type ImageSource } from 'expo-image';
 import { BlurView } from 'expo-blur';
+import { GlassContainer, GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { colors, discoverColors, radii, spacing } from '../../shared/theme/theme';
 import type { TabParamList } from './types';
 
-const TAB_ICON: Record<keyof TabParamList, ImageSource> = {
-  LibraryTab: require('../../../assets/figma-icons/nav-library.png'),
-  WishlistTab: require('../../../assets/figma-icons/nav-wishlist.png'),
-  ProfileTab: require('../../../assets/figma-icons/nav-profile.png'),
+/** Outline when idle, filled when selected. Figma "Frame 24/26/27" pairs; the filled profile is derived from its outline. */
+const TAB_ICON: Record<keyof TabParamList, { outline: ImageSource; filled: ImageSource }> = {
+  LibraryTab: {
+    outline: require('../../../assets/figma-icons/nav-library-outline.png'),
+    filled: require('../../../assets/figma-icons/nav-library-filled.png'),
+  },
+  WishlistTab: {
+    outline: require('../../../assets/figma-icons/nav-wishlist-outline.png'),
+    filled: require('../../../assets/figma-icons/nav-wishlist-filled.png'),
+  },
+  ProfileTab: {
+    outline: require('../../../assets/figma-icons/nav-profile-outline.png'),
+    filled: require('../../../assets/figma-icons/nav-profile-filled.png'),
+  },
 };
 
 const SEARCH_ICON = require('../../../assets/figma-icons/nav-search.png') as ImageSource;
 
+const BAR_HEIGHT = 54;
+const glassAvailable = Platform.OS === 'ios' && isLiquidGlassAvailable();
+
 export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+
+  const tabItems = state.routes.map((route, index) => {
+    const isFocused = state.index === index;
+    const icon = TAB_ICON[route.name as keyof TabParamList];
+
+    function handlePress() {
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route.key,
+        canPreventDefault: true,
+      });
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(route.name);
+      }
+    }
+
+    return (
+      <Pressable key={route.key} onPress={handlePress} style={styles.tabItem}>
+        <Image source={isFocused ? icon.filled : icon.outline} style={styles.tabIcon} contentFit="contain" />
+      </Pressable>
+    );
+  });
+
+  const searchIcon = <Image source={SEARCH_ICON} style={styles.fabIcon} contentFit="contain" />;
+  const openSearch = () => navigation.getParent()?.navigate('AddGame');
+
+  if (glassAvailable) {
+    // iOS 26: one interactive glass pill for the tabs and one for search, grouped so they
+    // merge when they get close. No overflow clip, so the press scale is not cut off.
+    return (
+      <GlassContainer
+        spacing={4}
+        style={[styles.container, { paddingBottom: insets.bottom || spacing.md }]}
+      >
+        <GlassView
+          style={styles.glassPill}
+          glassEffectStyle="regular"
+          colorScheme="dark"
+          isInteractive
+          tintColor={discoverColors.navBg}
+        >
+          {tabItems}
+        </GlassView>
+        <GlassView
+          style={styles.glassFab}
+          glassEffectStyle="regular"
+          colorScheme="dark"
+          isInteractive
+          tintColor={colors.accent}
+        >
+          <Pressable style={styles.glassFabHit} onPress={openSearch}>
+            {searchIcon}
+          </Pressable>
+        </GlassView>
+      </GlassContainer>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom || spacing.md }]}>
@@ -24,36 +95,12 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
         <View style={styles.pill}>
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, styles.pillTintDark]} />
-          {state.routes.map((route, index) => {
-            const isFocused = state.index === index;
-            const icon = TAB_ICON[route.name as keyof TabParamList];
-
-            function handlePress() {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            }
-
-            return (
-              <Pressable key={route.key} onPress={handlePress} style={styles.tabItem}>
-                <Image source={icon} style={styles.tabIcon} contentFit="contain" />
-                {isFocused && <View style={styles.activeDot} />}
-              </Pressable>
-            );
-          })}
+          {tabItems}
         </View>
       </View>
 
-      <Pressable
-        style={styles.fab}
-        onPress={() => navigation.getParent()?.navigate('AddGame')}
-      >
-        <Image source={SEARCH_ICON} style={styles.fabIcon} contentFit="contain" />
+      <Pressable style={styles.fab} onPress={openSearch}>
+        {searchIcon}
       </Pressable>
     </View>
   );
@@ -81,11 +128,33 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pill: {
-    height: 54,
+    height: BAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: radii.pill,
     overflow: 'hidden',
+  },
+  // Explicit half-height radii: UICornerRadius does not clamp radii.pill (999).
+  glassPill: {
+    flex: 1,
+    height: BAR_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BAR_HEIGHT / 2,
+  },
+  glassFab: {
+    width: 69,
+    height: BAR_HEIGHT,
+    borderRadius: BAR_HEIGHT / 2,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  glassFabHit: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pillTintDark: {
     backgroundColor: discoverColors.navBg,
@@ -93,21 +162,14 @@ const styles = StyleSheet.create({
   tabItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
   },
   tabIcon: {
     width: 24,
     height: 24,
   },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-  },
   fab: {
     width: 69,
-    height: 54,
+    height: BAR_HEIGHT,
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
     alignItems: 'center',

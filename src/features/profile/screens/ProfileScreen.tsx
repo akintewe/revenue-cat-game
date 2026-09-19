@@ -7,14 +7,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { Screen } from '../../../shared/components/Screen';
 import { Button } from '../../../shared/components/Button';
 import { colors, radii, spacing, typography } from '../../../shared/theme/theme';
-import { APP_NAME, PLUS_ENTITLEMENT_ID } from '../../../shared/constants/app';
+import { APP_NAME } from '../../../shared/constants/app';
 import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
 import { useAuthStore } from '../../auth/store/useAuthStore';
-import {
-  getCustomerInfo,
-  hasActiveEntitlement,
-  restorePurchases,
-} from '../../../services/revenuecat/purchases';
+import { useProStore } from '../../paywall/store/useProStore';
+import { restorePurchases } from '../../../services/revenuecat/purchases';
 import { fetchMyShareActivity, setShareActivity } from '../../../services/social/profiles';
 import {
   disconnectSteam,
@@ -32,7 +29,8 @@ const STEAM_CONNECT_BUTTON = require('../../../../assets/figma-icons/steam-conne
 type Props = TabScreenProps<'ProfileTab'>;
 
 export function ProfileScreen({ navigation }: Props) {
-  const [isPlus, setIsPlus] = useState(false);
+  const isPro = useProStore((state) => state.isPro);
+  const refreshPro = useProStore((state) => state.refresh);
   const gameCount = useLibraryStore((state) => state.entries.length);
   const signOut = useAuthStore((state) => state.signOut);
   const userId = useAuthStore((state) => state.session?.user.id);
@@ -157,22 +155,15 @@ export function ProfileScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      getCustomerInfo()
-        .then((info) => {
-          if (!cancelled) setIsPlus(hasActiveEntitlement(info, PLUS_ENTITLEMENT_ID));
-        })
-        .catch(() => undefined);
-      return () => {
-        cancelled = true;
-      };
+      refreshPro();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );
 
   async function handleRestore() {
     try {
-      const info = await restorePurchases();
-      setIsPlus(hasActiveEntitlement(info, PLUS_ENTITLEMENT_ID));
+      await restorePurchases();
+      await refreshPro();
       Alert.alert('Restored', 'Your purchases have been restored.');
     } catch (err) {
       Alert.alert('Restore failed', err instanceof Error ? err.message : 'Please try again.');
@@ -187,22 +178,22 @@ export function ProfileScreen({ navigation }: Props) {
       <View style={styles.card}>
         <View style={styles.cardRow}>
           <Ionicons
-            name={isPlus ? 'star' : 'star-outline'}
+            name={isPro ? 'star' : 'star-outline'}
             size={20}
-            color={isPlus ? colors.accent : colors.textMuted}
+            color={isPro ? colors.accent : colors.textMuted}
           />
           <Text style={typography.subheading}>
-            {isPlus ? `${APP_NAME} Plus` : `${APP_NAME} Free`}
+            {isPro ? `${APP_NAME} Pro` : `${APP_NAME} Free`}
           </Text>
         </View>
         <Text style={typography.body}>
-          {isPlus
+          {isPro
             ? 'Unlimited shelves, backlog stats, and sync are unlocked.'
             : `${gameCount}/${FREE_TIER_GAME_LIMIT} games used on the free tier.`}
         </Text>
-        {!isPlus && (
+        {!isPro && (
           <Button
-            label="Upgrade to Plus"
+            label="Upgrade to Pro"
             onPress={() => navigation.navigate('Paywall')}
             style={styles.spacerTop}
           />

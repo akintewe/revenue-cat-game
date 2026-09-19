@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   FlatList,
@@ -21,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { GameCover } from '../../../shared/components/GameCover';
+import { GamePreviewModal } from '../../../shared/components/GamePreviewModal';
 import { PlatformIcon } from '../../../shared/components/PlatformIcon';
 import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, discoverColors, radii, spacing } from '../../../shared/theme/theme';
@@ -34,7 +36,7 @@ import {
 import { fetchGenrePills, type SearchDevice, type SearchFilters, type SearchSort } from '../../../services/catalog/remoteCatalog';
 import { isUuid } from '../../../shared/utils/id';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
-import { useLibraryStore, FREE_TIER_GAME_LIMIT } from '../../library/store/useLibraryStore';
+import { useLibraryStore } from '../../library/store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
@@ -124,6 +126,9 @@ export function AddGameScreen({ navigation }: Props) {
   const [popularPreview, setPopularPreview] = useState<CatalogGame[]>([]);
   const [browsePopular, setBrowsePopular] = useState<CatalogGame[]>([]);
   const [browsePopularLoading, setBrowsePopularLoading] = useState(false);
+  const [browsePopularLoadingMore, setBrowsePopularLoadingMore] = useState(false);
+  const [browsePopularOffset, setBrowsePopularOffset] = useState(0);
+  const [browsePopularExhausted, setBrowsePopularExhausted] = useState(false);
 
   const [recentPreview, setRecentPreview] = useState<CatalogGame[]>([]);
   const [browseRecent, setBrowseRecent] = useState<CatalogGame[]>([]);
@@ -159,6 +164,7 @@ export function AddGameScreen({ navigation }: Props) {
   const addGame = useLibraryStore((state) => state.addGame);
   const libraryIds = useMemo(() => new Set(entries.map((entry) => entry.catalogId)), [entries]);
   const libraryIdsKey = Array.from(libraryIds).join(',');
+  const [previewGame, setPreviewGame] = useState<CatalogGame | null>(null);
 
   // Refetches on every focus (not just mount) so the rail reflects a game just opened
   // from here, without needing the user to fully back out and reopen this screen.
@@ -237,8 +243,10 @@ export function AddGameScreen({ navigation }: Props) {
     setBrowseSection(section);
     if (section === 'popular' && browsePopular.length === 0) {
       setBrowsePopularLoading(true);
-      fetchPopularSuggestions(libraryIds, POPULAR_BROWSE_LIMIT).then(({ games }) => {
+      fetchPopularSuggestions(libraryIds, POPULAR_BROWSE_LIMIT).then(({ games, nextOffset, exhausted }) => {
         setBrowsePopular(games);
+        setBrowsePopularOffset(nextOffset);
+        setBrowsePopularExhausted(exhausted);
         setBrowsePopularLoading(false);
       });
     }
@@ -251,20 +259,30 @@ export function AddGameScreen({ navigation }: Props) {
     }
   }
 
+  function loadMorePopular() {
+    if (browsePopularLoading || browsePopularLoadingMore || browsePopularExhausted) return;
+    setBrowsePopularLoadingMore(true);
+    fetchPopularSuggestions(libraryIds, POPULAR_BROWSE_LIMIT, browsePopularOffset).then(({ games, nextOffset, exhausted }) => {
+      setBrowsePopular((prev) => {
+        const seen = new Set(prev.map((g) => g.id));
+        return [...prev, ...games.filter((g) => !seen.has(g.id))];
+      });
+      setBrowsePopularOffset(nextOffset);
+      setBrowsePopularExhausted(exhausted);
+      setBrowsePopularLoadingMore(false);
+    });
+  }
+
   async function handleAdd(game: CatalogGame) {
-    if (entries.length >= FREE_TIER_GAME_LIMIT && !isInLibrary(game.id)) {
-      Alert.alert(
-        'Library full',
-        `The free tier stops at ${FREE_TIER_GAME_LIMIT} games. Upgrade to Plus for unlimited shelves.`,
-      );
-      return;
-    }
     const catalogId = isUuid(game.id) ? game.id : await resolveRemoteId(game.title);
     if (!catalogId) {
       Alert.alert('Not in the live catalog yet', `Couldn't find "${game.title}" to add it.`);
       return;
     }
-    addGame(catalogId);
+    const { limitReached } = await addGame(catalogId);
+    if (limitReached) {
+      navigation.navigate('Paywall', { pendingGameId: catalogId });
+    }
   }
 
   function sortOnly(list: CatalogGame[]): CatalogGame[] {
@@ -347,17 +365,29 @@ export function AddGameScreen({ navigation }: Props) {
   function renderIdleSections() {
     return (
       <>
+        <Pressable style={styles.vagueSearchBanner} onPress={() => navigation.navigate('VagueSearch')}>
+          <View style={styles.vagueSearchIconWrap}>
+            <Ionicons name="help-circle-outline" size={18} color={colors.accent} />
+          </View>
+          <View style={styles.vagueSearchTextWrap}>
+            <Text style={styles.vagueSearchTitle}>Can't remember the name?</Text>
+            <Text style={styles.vagueSearchSubtitle}>Describe the game and we'll find it</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={discoverColors.mutedText} />
+        </Pressable>
         <VerticalSection
           title="Recently Viewed"
           data={recentPreview}
           onSeeAll={() => openBrowseSection('recent')}
           onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+          onLongPressItem={setPreviewGame}
         />
         <VerticalSection
           title="Explore your Library"
           data={myLibraryGames}
           onSeeAll={() => openBrowseSection('library')}
           onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+          onLongPressItem={setPreviewGame}
         />
         <VerticalSection
           title="Explore popular"
@@ -368,6 +398,7 @@ export function AddGameScreen({ navigation }: Props) {
           isInLibrary={isInLibrary}
           onAdd={handleAdd}
           onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+          onLongPressItem={setPreviewGame}
         />
         <VerticalSection
           title="Explore Saved"
@@ -378,6 +409,7 @@ export function AddGameScreen({ navigation }: Props) {
           isInLibrary={isInLibrary}
           onAdd={handleAdd}
           onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+          onLongPressItem={setPreviewGame}
         />
       </>
     );
@@ -436,6 +468,7 @@ export function AddGameScreen({ navigation }: Props) {
           isInLibrary={isInLibrary}
           onAdd={handleAdd}
           onPress={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+          onLongPress={setPreviewGame}
         />
       );
     }
@@ -449,7 +482,15 @@ export function AddGameScreen({ navigation }: Props) {
     }
 
     if (sortedResults.length === 0) {
-      return <Text style={styles.emptyText}>{`Nothing matches "${trimmedQuery}".`}</Text>;
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>{`Nothing matches "${trimmedQuery}".`}</Text>
+          <Pressable style={styles.vagueSearchLink} onPress={() => navigation.navigate('VagueSearch')}>
+            <Ionicons name="help-circle-outline" size={14} color={colors.accent} />
+            <Text style={styles.vagueSearchLinkText}>Describe the game instead</Text>
+          </Pressable>
+        </View>
+      );
     }
 
     return (
@@ -465,6 +506,7 @@ export function AddGameScreen({ navigation }: Props) {
             isInLibrary={isInLibrary}
             onAdd={handleAdd}
             onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+            onLongPressItem={setPreviewGame}
           />
         )}
         {fromLibraryMatches.length > 0 && (
@@ -473,6 +515,7 @@ export function AddGameScreen({ navigation }: Props) {
             data={fromLibraryMatches}
             compact
             onPressItem={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+            onLongPressItem={setPreviewGame}
           />
         )}
         {gamesList.length > 0 && (
@@ -482,6 +525,7 @@ export function AddGameScreen({ navigation }: Props) {
             isInLibrary={isInLibrary}
             onAdd={handleAdd}
             onPress={(game) => navigation.navigate('GameDetail', { catalogId: game.id })}
+            onLongPress={setPreviewGame}
           />
         )}
       </>
@@ -535,8 +579,19 @@ export function AddGameScreen({ navigation }: Props) {
             contentContainerStyle={styles.bodyContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            onScroll={({ nativeEvent }) => {
+              if (browseSection !== 'popular') return;
+              const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+              if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 300) {
+                loadMorePopular();
+              }
+            }}
+            scrollEventThrottle={200}
           >
             {!searchActive ? renderIdleSections() : renderResultsBody()}
+            {browseSection === 'popular' && browsePopularLoadingMore && (
+              <ActivityIndicator color={colors.accent} style={styles.loadMoreSpinner} />
+            )}
           </ScrollView>
         )}
       </View>
@@ -578,6 +633,25 @@ export function AddGameScreen({ navigation }: Props) {
           </View>
         </KeyboardAvoidingView>
       )}
+
+      <GamePreviewModal
+        game={previewGame}
+        visible={!!previewGame}
+        isOwned={previewGame ? isInLibrary(previewGame.id) : false}
+        status={previewGame ? entries.find((entry) => entry.catalogId === previewGame.id)?.status : undefined}
+        onClose={() => setPreviewGame(null)}
+        onViewDetails={() => {
+          if (!previewGame) return;
+          const catalogId = previewGame.id;
+          setPreviewGame(null);
+          navigation.navigate('GameDetail', { catalogId });
+        }}
+        onAdd={() => {
+          if (!previewGame) return;
+          handleAdd(previewGame);
+          setPreviewGame(null);
+        }}
+      />
     </View>
   );
 }
@@ -591,9 +665,10 @@ type VerticalSectionProps = {
   isInLibrary?: (id: string) => boolean;
   onAdd?: (game: CatalogGame) => void;
   onPressItem: (game: CatalogGame) => void;
+  onLongPressItem?: (game: CatalogGame) => void;
 };
 
-function VerticalSection({ title, data, onSeeAll, seeAllLabel, withAddPill, isInLibrary, onAdd, onPressItem }: VerticalSectionProps) {
+function VerticalSection({ title, data, onSeeAll, seeAllLabel, withAddPill, isInLibrary, onAdd, onPressItem, onLongPressItem }: VerticalSectionProps) {
   if (data.length === 0) return null;
   return (
     <View style={styles.section}>
@@ -606,7 +681,7 @@ function VerticalSection({ title, data, onSeeAll, seeAllLabel, withAddPill, isIn
       {data.slice(0, 3).map((game) => {
         const added = isInLibrary?.(game.id);
         return (
-          <Pressable key={game.id} style={styles.row} onPress={() => onPressItem(game)}>
+          <Pressable key={game.id} style={styles.row} onPress={() => onPressItem(game)} onLongPress={() => onLongPressItem?.(game)}>
             <GameCover abbreviation={game.abbreviation} colorKey={game.colorKey} imageUrl={game.coverImageUrl} size={48} />
             <View style={styles.rowInfo}>
               <Text style={styles.rowTitle} numberOfLines={1}>
@@ -633,9 +708,10 @@ type HorizontalSectionProps = {
   compact?: boolean;
   isInLibrary?: (id: string) => boolean;
   onAdd?: (game: CatalogGame) => void;
+  onLongPressItem?: (game: CatalogGame) => void;
 };
 
-function HorizontalSection({ title, data, onPressItem, withAddPill, compact, isInLibrary, onAdd }: HorizontalSectionProps) {
+function HorizontalSection({ title, data, onPressItem, withAddPill, compact, isInLibrary, onAdd, onLongPressItem }: HorizontalSectionProps) {
   if (data.length === 0) return null;
   return (
     <View style={styles.section}>
@@ -647,7 +723,12 @@ function HorizontalSection({ title, data, onPressItem, withAddPill, compact, isI
         {data.map((game) => {
           const added = isInLibrary?.(game.id);
           return (
-            <Pressable key={game.id} style={compact ? styles.compactCard : styles.card} onPress={() => onPressItem(game)}>
+            <Pressable
+              key={game.id}
+              style={compact ? styles.compactCard : styles.card}
+              onPress={() => onPressItem(game)}
+              onLongPress={() => onLongPressItem?.(game)}
+            >
               <GameCover
                 abbreviation={game.abbreviation}
                 colorKey={game.colorKey}
@@ -696,9 +777,10 @@ type GamesListProps = {
   isInLibrary: (id: string) => boolean;
   onAdd: (game: CatalogGame) => void;
   onPress: (game: CatalogGame) => void;
+  onLongPress?: (game: CatalogGame) => void;
 };
 
-function GamesList({ title, data, isInLibrary, onAdd, onPress }: GamesListProps) {
+function GamesList({ title, data, isInLibrary, onAdd, onPress, onLongPress }: GamesListProps) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -710,7 +792,7 @@ function GamesList({ title, data, isInLibrary, onAdd, onPress }: GamesListProps)
         renderItem={({ item }) => {
           const added = isInLibrary(item.id);
           return (
-            <Pressable style={styles.row} onPress={() => onPress(item)}>
+            <Pressable style={styles.row} onPress={() => onPress(item)} onLongPress={() => onLongPress?.(item)}>
               <GameCover abbreviation={item.abbreviation} colorKey={item.colorKey} imageUrl={item.coverImageUrl} size={48} />
               <View style={styles.rowInfo}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
@@ -1069,11 +1151,58 @@ const styles = StyleSheet.create({
     color: colors.textFaint,
     fontSize: 12,
   },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
   emptyText: {
     color: discoverColors.mutedText,
     fontSize: 14,
     textAlign: 'center',
-    paddingVertical: spacing.xl,
+  },
+  vagueSearchLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  vagueSearchLinkText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  vagueSearchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: discoverColors.rowBg,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  vagueSearchIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: colors.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vagueSearchTextWrap: {
+    flex: 1,
+    gap: 1,
+  },
+  vagueSearchTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  vagueSearchSubtitle: {
+    color: discoverColors.mutedText,
+    fontSize: 12,
+  },
+  loadMoreSpinner: {
+    paddingVertical: spacing.lg,
   },
   row: {
     flexDirection: 'row',

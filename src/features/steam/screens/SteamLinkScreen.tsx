@@ -11,6 +11,7 @@ import {
   type SteamImportResult,
 } from '../../../services/social/steam';
 import { useLibraryStore } from '../../library/store/useLibraryStore';
+import { useProStore } from '../../paywall/store/useProStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 type Props = RootScreenProps<'SteamLink'>;
@@ -26,6 +27,14 @@ export function SteamLinkScreen({ route, navigation }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fixUrl, setFixUrl] = useState<string | null>(null);
   const [result, setResult] = useState<SteamImportResult | null>(null);
+  const isPro = useProStore((state) => state.isPro);
+
+  // P1 — the paywall goes after the import result is shown, never before.
+  useEffect(() => {
+    if (stage !== 'done' || !result || isPro) return;
+    navigation.navigate('Paywall', { importedCount: result.matched, totalCount: result.total });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, result, isPro]);
 
   useEffect(() => {
     if (status !== 'ok') return;

@@ -13,10 +13,14 @@ export type TabParamList = {
 export type RootStackParamList = {
   Tabs: { screen: 'LibraryTab'; params?: TabParamList['LibraryTab'] } | undefined;
   AddGame: undefined;
+  VagueSearch: undefined;
   GameDetail: { catalogId: string };
-  Paywall: undefined;
+  Paywall:
+    | { pendingGameId?: string; importedCount?: number; totalCount?: number }
+    | undefined;
   Passport: undefined;
   AchievementDetail: { stamp: Stamp };
+  Events: undefined;
   ShareConfirm: { url: string };
   SteamLink: { status: 'ok' | 'failed' | 'expired'; nonce: string };
   FriendProfile: { handle: string };

@@ -1,5 +1,5 @@
 import { supabase } from '../supabase/client';
-import type { RemoteCatalogGame } from './types';
+import type { RemoteCatalogGame, RemoteGameDetail } from './types';
 
 export type SearchDevice = 'playstation' | 'xbox' | 'nintendo' | 'pc' | 'mobile';
 export type SearchSort = 'best_match' | 'popular' | 'rating' | 'recent' | 'alpha';
@@ -59,9 +59,9 @@ export async function fetchGenrePills(): Promise<string[]> {
 export async function getRemoteCatalogGame(
   id: string,
   options?: { track?: boolean },
-): Promise<RemoteCatalogGame | null> {
+): Promise<RemoteGameDetail | null> {
   const query = options?.track ? '' : '?track=0';
-  const { data, error } = await supabase.functions.invoke<RemoteCatalogGame>(`games/${id}${query}`, {
+  const { data, error } = await supabase.functions.invoke<RemoteGameDetail>(`games/${id}${query}`, {
     method: 'GET',
   });
   if (error) throw error;

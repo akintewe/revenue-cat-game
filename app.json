@@ -69,8 +69,8 @@
       "./plugins/withAndroidPackageQueries.js"
     ],
     "extra": {
-      "revenueCatApiKeyIos": "",
-      "revenueCatApiKeyAndroid": "",
+      "revenueCatApiKeyIos": "test_uShePXvPrgYocgrGDyQRzrQWHke",
+      "revenueCatApiKeyAndroid": "test_uShePXvPrgYocgrGDyQRzrQWHke",
       "eas": {
         "projectId": "4c28ff2a-446c-4a5f-9499-9050d7a8489f"
       }

@@ -8,7 +8,12 @@ import { env } from '../../config/env';
 
 let isConfigured = false;
 
-export function configurePurchases(appUserId?: string) {
+/**
+ * Call once at app boot, before any auth state is known — this configures the SDK
+ * anonymously. Identify the signed-in user afterwards with `loginPurchases`, never
+ * by passing an id here (see prysm-pro-for-sola.md §2.5).
+ */
+export function configurePurchases() {
   if (isConfigured) return;
 
   const apiKey = Platform.select({
@@ -22,8 +27,24 @@ export function configurePurchases(appUserId?: string) {
     return;
   }
 
-  Purchases.configure({ apiKey, appUserID: appUserId });
+  Purchases.configure({ apiKey });
   isConfigured = true;
+}
+
+/**
+ * Ties the RevenueCat subscriber to our own Supabase user id. Without this, a
+ * purchase is keyed to an anonymous device id and is invisible on any other
+ * device or after a reinstall — call on every launch where a session exists, not
+ * just from the sign-in screen.
+ */
+export async function loginPurchases(supabaseUserId: string): Promise<void> {
+  if (!isConfigured) return;
+  await Purchases.logIn(supabaseUserId);
+}
+
+export async function logoutPurchases(): Promise<void> {
+  if (!isConfigured) return;
+  await Purchases.logOut();
 }
 
 export async function getOfferings(): Promise<PurchasesOffering | null> {

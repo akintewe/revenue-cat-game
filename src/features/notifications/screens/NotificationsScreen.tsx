@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,8 @@ function describe(item: ShelfNotification): string {
       return `liked your post${item.post_excerpt ? `: "${item.post_excerpt}"` : ''}`;
     case 'post_comment':
       return `commented${item.comment_excerpt ? `: "${item.comment_excerpt}"` : ''}`;
+    case 'game_release':
+      return 'is out today';
     default:
       return '';
   }
@@ -36,6 +39,8 @@ function iconFor(kind: ShelfNotification['kind']): keyof typeof Ionicons.glyphMa
       return 'heart';
     case 'post_comment':
       return 'chatbubble';
+    case 'game_release':
+      return 'game-controller';
   }
 }
 
@@ -78,6 +83,10 @@ export function NotificationsScreen({ navigation }: Props) {
 
   async function handlePressItem(item: ShelfNotification) {
     if (openingId) return;
+    if (item.kind === 'game_release') {
+      if (item.game_id) navigation.navigate('GameDetail', { catalogId: item.game_id });
+      return;
+    }
     const isPostNotification = item.kind === 'post_like' || item.kind === 'post_comment';
     if (isPostNotification && item.post_id && myHandle) {
       setOpeningId(item.id);
@@ -120,13 +129,17 @@ export function NotificationsScreen({ navigation }: Props) {
               disabled={openingId === item.id}
             >
               <View style={[styles.avatar, { backgroundColor: coverColors[item.avatar_color] ?? coverColors.slate }]}>
+                {item.kind === 'game_release' && item.game_cover ? (
+                  <Image source={{ uri: item.game_cover }} style={styles.avatarCover} contentFit="cover" />
+                ) : null}
                 <View style={styles.avatarBadge}>
                   <Ionicons name={iconFor(item.kind)} size={11} color={colors.onAccent} />
                 </View>
               </View>
               <View style={styles.rowBody}>
                 <Text style={styles.rowText}>
-                  <Text style={styles.rowName}>{item.display_name}</Text> {describe(item)}
+                  <Text style={styles.rowName}>{item.kind === 'game_release' ? item.game_title ?? 'A game' : item.display_name}</Text>{' '}
+                  {describe(item)}
                 </Text>
                 <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
               </View>
@@ -180,6 +193,14 @@ const styles = StyleSheet.create({
   },
   rowUnread: {
     backgroundColor: colors.accentMuted,
+  },
+  avatarCover: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
   },
   avatar: {
     width: 40,

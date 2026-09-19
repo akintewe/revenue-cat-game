@@ -15,6 +15,7 @@ type GameRowProps = PropsWithChildren<{
   colorKey: CoverColorKey;
   imageUrl?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }>;
 
@@ -26,12 +27,14 @@ export function GameRow({
   colorKey,
   imageUrl,
   onPress,
+  onLongPress,
   style,
   children,
 }: GameRowProps) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={!onPress}
       style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed, style]}
     >

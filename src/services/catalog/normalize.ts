@@ -29,6 +29,9 @@ export function normalizeRemoteGame(remote: RemoteCatalogGame): CatalogGame {
     coverImageUrl: remote.coverImageUrl,
     criticScore: remote.criticScore,
     timeToBeatHours: remote.timeToBeatHours,
+    timeToBeatCount: remote.timeToBeatCount,
+    releasePrecision: remote.releasePrecision,
+    summary: remote.summary,
     // pcRequirements has no IGDB equivalent — stays undefined for every remote game.
   };
 }

@@ -8,10 +8,12 @@ import { useShareIntentContext } from 'expo-share-intent';
 import { TabNavigator } from './TabNavigator';
 import { SplashScreen } from '../../shared/components/SplashScreen';
 import { AddGameScreen } from '../../features/addGame/screens/AddGameScreen';
+import { VagueSearchScreen } from '../../features/vagueSearch/screens/VagueSearchScreen';
 import { GameDetailScreen } from '../../features/library/screens/GameDetailScreen';
 import { PaywallScreen } from '../../features/paywall/screens/PaywallScreen';
 import { PassportScreen } from '../../features/passport/screens/PassportScreen';
 import { AchievementDetailScreen } from '../../features/passport/screens/AchievementDetailScreen';
+import { EventsScreen } from '../../features/events/screens/EventsScreen';
 import { ShareConfirmScreen } from '../../features/share/screens/ShareConfirmScreen';
 import { SteamLinkScreen } from '../../features/steam/screens/SteamLinkScreen';
 import { FriendProfileScreen } from '../../features/friendProfile/screens/FriendProfileScreen';
@@ -29,6 +31,8 @@ import { useOnboardingStore } from '../../features/onboarding/store/useOnboardin
 import { useAuthStore } from '../../features/auth/store/useAuthStore';
 import { useLibraryStore } from '../../features/library/store/useLibraryStore';
 import { useWishlistStore } from '../../features/wishlist/store/useWishlistStore';
+import { useProStore } from '../../features/paywall/store/useProStore';
+import { configurePurchases, loginPurchases, logoutPurchases } from '../../services/revenuecat/purchases';
 import { ensureProfile } from '../../services/social/profiles';
 import { colors } from '../../shared/theme/theme';
 import type { RootStackParamList } from './types';
@@ -110,6 +114,8 @@ export function RootNavigator() {
 
   useEffect(() => {
     initialize();
+    configurePurchases();
+    useProStore.getState().listen();
     const timer = setTimeout(() => setMinSplashElapsed(true), MIN_SPLASH_MS);
     return () => clearTimeout(timer);
   }, [initialize]);
@@ -124,6 +130,9 @@ export function RootNavigator() {
         );
       }
       if (session?.user.id) {
+        loginPurchases(session.user.id)
+          .then(() => useProStore.getState().refresh())
+          .catch((err) => console.warn('[pro] loginPurchases failed', err));
         // Local-only flag can't tell "just signed up" from "existing account, new device" —
         // an account created more than half an hour ago is treated as a returning login
         // regardless of whether this device has seen it before, so onboarding never
@@ -138,6 +147,7 @@ export function RootNavigator() {
     } else if (status === 'signedOut') {
       useLibraryStore.getState().reset();
       useWishlistStore.getState().reset();
+      logoutPurchases().catch((err) => console.warn('[pro] logoutPurchases failed', err));
       setOnboardingPending(null);
       // clearOneSignalUser() — same as above.
     }
@@ -175,6 +185,11 @@ export function RootNavigator() {
             <Stack.Screen
               name="AddGame"
               component={AddGameScreen}
+              options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="VagueSearch"
+              component={VagueSearchScreen}
               options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="GameDetail" component={GameDetailScreen} options={{ headerShown: false }} />
@@ -236,6 +251,11 @@ export function RootNavigator() {
             <Stack.Screen
               name="Passport"
               component={PassportScreen}
+              options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
+            />
+            <Stack.Screen
+              name="Events"
+              component={EventsScreen}
               options={({ navigation }) => ({ title: '', headerLeft: () => <BackButton navigation={navigation} /> })}
             />
             <Stack.Screen

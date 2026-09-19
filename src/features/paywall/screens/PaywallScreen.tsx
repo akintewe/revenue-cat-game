@@ -8,6 +8,8 @@ import { ScreenBackground } from '../../../shared/components/ScreenBackground';
 import { APP_NAME } from '../../../shared/constants/app';
 import { purchasePackage, restorePurchases } from '../../../services/revenuecat/purchases';
 import { useOfferings } from '../hooks/useOfferings';
+import { useProStore } from '../store/useProStore';
+import { useLibraryStore } from '../../library/store/useLibraryStore';
 import type { RootScreenProps } from '../../../core/navigation/types';
 
 type Props = RootScreenProps<'Paywall'>;
@@ -18,7 +20,7 @@ const FEATURES = [
   {
     icon: 'library-outline' as const,
     title: 'Unlimited shelves',
-    description: 'The free tier stops at 50 games. Plus never does.',
+    description: 'The free tier stops at 50 games. Pro never does.',
   },
   {
     icon: 'stats-chart-outline' as const,
@@ -32,13 +34,16 @@ const FEATURES = [
   },
 ];
 
-const FALLBACK_ANNUAL_PRICE = '£19.99/yr';
-const FALLBACK_MONTHLY_PRICE = '£2.99/mo';
+const FALLBACK_ANNUAL_PRICE = '$19.99/yr';
+const FALLBACK_MONTHLY_PRICE = '$2.99/mo';
 
-export function PaywallScreen({ navigation }: Props) {
+export function PaywallScreen({ navigation, route }: Props) {
+  const { pendingGameId, importedCount, totalCount } = route.params ?? {};
   const { offering } = useOfferings();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('annual');
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const refreshPro = useProStore((state) => state.refresh);
+  const addGame = useLibraryStore((state) => state.addGame);
 
   const annualPackage = offering?.annual ?? null;
   const monthlyPackage = offering?.monthly ?? null;
@@ -60,6 +65,9 @@ export function PaywallScreen({ navigation }: Props) {
     setIsPurchasing(true);
     try {
       await purchasePackage(selectedPackage);
+      await refreshPro();
+      // The game they were adding when they hit the cap is not lost — add it now that they're Pro.
+      if (pendingGameId) await addGame(pendingGameId);
       navigation.goBack();
     } catch (err) {
       Alert.alert('Purchase failed', err instanceof Error ? err.message : 'Please try again.');
@@ -71,6 +79,7 @@ export function PaywallScreen({ navigation }: Props) {
   async function handleRestore() {
     try {
       await restorePurchases();
+      await refreshPro();
       Alert.alert('Restored', 'Your purchases have been restored.');
     } catch (err) {
       Alert.alert('Restore failed', err instanceof Error ? err.message : 'Please try again.');
@@ -85,8 +94,14 @@ export function PaywallScreen({ navigation }: Props) {
       </Pressable>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.eyebrow}>{APP_NAME} Plus</Text>
-        <Text style={styles.title}>Finish more{'\n'}of what you start</Text>
+        <Text style={styles.eyebrow}>{APP_NAME} Pro</Text>
+        {importedCount != null && totalCount != null ? (
+          <Text style={styles.title}>
+            We found {importedCount.toLocaleString()} of your {totalCount.toLocaleString()} games{'\n'}keep all of them
+          </Text>
+        ) : (
+          <Text style={styles.title}>Finish more{'\n'}of what you start</Text>
+        )}
 
         <View style={styles.features}>
           {FEATURES.map((feature) => (

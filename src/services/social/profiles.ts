@@ -1,6 +1,7 @@
 import { supabase } from '../supabase/client';
 import { coverColors } from '../../shared/theme/theme';
 import type { CoverColorKey } from '../../data/catalog';
+import type { SearchDevice } from '../catalog/remoteCatalog';
 
 const AVATAR_COLORS = Object.keys(coverColors) as CoverColorKey[];
 
@@ -102,7 +103,7 @@ export class ProfileUpdateError extends Error {
 
 export async function updateMyProfile(
   userId: string,
-  patch: Partial<Pick<MyProfile, 'handle' | 'display_name' | 'bio' | 'avatar_color'>>,
+  patch: Partial<Pick<MyProfile, 'handle' | 'display_name' | 'bio' | 'avatar_color'>> & { platforms?: SearchDevice[] },
 ): Promise<void> {
   const { error } = await supabase.from('profiles').update(patch).eq('user_id', userId);
   if (!error) return;
@@ -162,6 +163,25 @@ export type FollowListRow = ProfileSummary & {
 /** Prefix search over handle/display name. Under 2 characters returns nothing, same floor as /search. */
 export async function searchUsers(query: string, maxResults = 20): Promise<ProfileSummary[]> {
   const { data, error } = await supabase.rpc('shelf_search_users', { q: query, max_results: maxResults });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export type SuggestedUser = ProfileSummary & {
+  games_in_common: number;
+  library_count: number;
+  /** Null (not 0) on every real account today — render as absent, not "0 hrs". */
+  hours_played: number | null;
+  platforms: SearchDevice[];
+};
+
+/**
+ * Curated "people like you" — ranked games-in-common, then shared platforms, then
+ * library size, then hours, with accounts under 3 games sorted last (never excluded).
+ * Already excludes people followed and either direction of a block.
+ */
+export async function fetchSuggestedUsers(maxResults = 20): Promise<SuggestedUser[]> {
+  const { data, error } = await supabase.rpc('shelf_suggested_users', { max_results: maxResults });
   if (error) throw error;
   return data ?? [];
 }

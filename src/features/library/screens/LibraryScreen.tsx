@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { Image, type ImageSource } from 'expo-image';
 import { GameCover } from '../../../shared/components/GameCover';
+import { GamePreviewModal } from '../../../shared/components/GamePreviewModal';
 import { PostCard } from '../components/PostCard';
 import { GameRow } from '../../../shared/components/GameRow';
 import { StatusPill } from '../../../shared/components/StatusPill';
@@ -272,6 +273,8 @@ export function LibraryScreen({ navigation, route }: Props) {
   const addGame = useLibraryStore((state) => state.addGame);
   const wishlistEntries = useWishlistStore((state) => state.entries);
 
+  const [previewGame, setPreviewGame] = useState<CatalogGame | null>(null);
+
   const libraryIds = useMemo(() => new Set(entries.map((entry) => entry.catalogId)), [entries]);
   const wishlistIds = useMemo(() => wishlistEntries.map((entry) => entry.catalogId), [wishlistEntries]);
 
@@ -381,6 +384,7 @@ export function LibraryScreen({ navigation, route }: Props) {
         colorKey={row.game.colorKey}
         imageUrl={row.game.coverImageUrl}
         onPress={() => navigation.navigate('GameDetail', { catalogId: row.entry.catalogId })}
+        onLongPress={() => setPreviewGame(row.game)}
         style={[styles.libraryRow, isLast && styles.libraryRowLast]}
       >
         {isUpcoming ? <PreorderPill /> : <StatusPill status={row.entry.status} />}
@@ -400,6 +404,7 @@ export function LibraryScreen({ navigation, route }: Props) {
         colorKey={game.colorKey}
         imageUrl={game.coverImageUrl}
         onPress={() => navigation.navigate('GameDetail', { catalogId: game.id })}
+        onLongPress={() => setPreviewGame(game)}
         style={[styles.libraryRow, isLast && styles.libraryRowLast]}
       >
         {isUpcoming ? (
@@ -424,6 +429,9 @@ export function LibraryScreen({ navigation, route }: Props) {
   const [gridQuery, setGridQuery] = useState('');
   const [gridResults, setGridResults] = useState<CatalogGame[]>([]);
   const [gridLoading, setGridLoading] = useState(false);
+  const [gridLoadingMore, setGridLoadingMore] = useState(false);
+  const [gridOffset, setGridOffset] = useState(0);
+  const [gridExhausted, setGridExhausted] = useState(false);
 
   useEffect(() => {
     if (!browsingPopular) return;
@@ -434,11 +442,13 @@ export function LibraryScreen({ navigation, route }: Props) {
     const timer = setTimeout(
       () => {
         const request = trimmed
-          ? searchAllCatalog(trimmed).then((r) => r.games)
-          : fetchPopularSuggestions(libraryIds, GRID_POPULAR_LIMIT).then((r) => r.games);
-        request.then((games) => {
+          ? searchAllCatalog(trimmed).then((r) => ({ games: r.games, nextOffset: 0, exhausted: true }))
+          : fetchPopularSuggestions(libraryIds, GRID_POPULAR_LIMIT, 0);
+        request.then(({ games, nextOffset, exhausted }) => {
           if (cancelled) return;
           setGridResults(games);
+          setGridOffset(nextOffset);
+          setGridExhausted(exhausted);
           setGridLoading(false);
         });
       },
@@ -451,6 +461,21 @@ export function LibraryScreen({ navigation, route }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [browsingPopular, gridQuery]);
+
+  /** Search results aren't offset-paginated — only the popular (no-query) grid can load more. */
+  function loadMoreGrid() {
+    if (gridQuery.trim() || gridLoading || gridLoadingMore || gridExhausted) return;
+    setGridLoadingMore(true);
+    fetchPopularSuggestions(libraryIds, GRID_POPULAR_LIMIT, gridOffset).then(({ games, nextOffset, exhausted }) => {
+      setGridResults((prev) => {
+        const seen = new Set(prev.map((g) => g.id));
+        return [...prev, ...games.filter((g) => !seen.has(g.id))];
+      });
+      setGridOffset(nextOffset);
+      setGridExhausted(exhausted);
+      setGridLoadingMore(false);
+    });
+  }
 
   function renderExploreCardSkeleton(key: number) {
     return (
@@ -468,6 +493,7 @@ export function LibraryScreen({ navigation, route }: Props) {
         key={game.id}
         style={styles.exploreCard}
         onPress={() => navigation.navigate('GameDetail', { catalogId: game.id })}
+        onLongPress={() => setPreviewGame(game)}
       >
         <GameCover
           abbreviation={game.abbreviation}
@@ -580,24 +606,34 @@ export function LibraryScreen({ navigation, route }: Props) {
             columnWrapperStyle={styles.gridRow}
             contentContainerStyle={styles.gridContent}
             showsVerticalScrollIndicator={false}
+            onEndReached={loadMoreGrid}
+            onEndReachedThreshold={0.5}
             ListEmptyComponent={
               gridLoading ? (
-                <View style={styles.gridRow}>
-                  {[0, 1, 2].map((key) => (
-                    <View key={key} style={styles.gridItem}>
-                      <Shimmer style={styles.gridCoverSkeleton} />
-                      <Shimmer style={styles.skeletonLine} />
+                <>
+                  {[0, 1, 2].map((row) => (
+                    <View key={row} style={styles.gridRow}>
+                      {[0, 1, 2].map((col) => (
+                        <View key={col} style={styles.gridItem}>
+                          <Shimmer style={styles.gridCoverSkeleton} />
+                          <Shimmer style={styles.skeletonLine} />
+                        </View>
+                      ))}
                     </View>
                   ))}
-                </View>
+                </>
               ) : (
                 <Text style={styles.gridEmptyText}>No games found.</Text>
               )
+            }
+            ListFooterComponent={
+              gridLoadingMore ? <ActivityIndicator color={colors.accent} style={styles.loadMoreSpinner} /> : null
             }
             renderItem={({ item }) => (
               <Pressable
                 style={styles.gridItem}
                 onPress={() => navigation.navigate('GameDetail', { catalogId: item.id })}
+                onLongPress={() => setPreviewGame(item)}
               >
                 <GameCover
                   abbreviation={item.abbreviation}
@@ -802,6 +838,7 @@ export function LibraryScreen({ navigation, route }: Props) {
                           key={game.id}
                           style={[styles.popularRow, index === popularToShow.length - 1 && styles.popularRowLast]}
                           onPress={() => navigation.navigate('GameDetail', { catalogId: game.id })}
+                          onLongPress={() => setPreviewGame(game)}
                         >
                           <GameCover
                             abbreviation={game.abbreviation}
@@ -819,7 +856,13 @@ export function LibraryScreen({ navigation, route }: Props) {
                               <PlatformIcon platform={game.platform} size={14} color={discoverColors.mutedText} />
                             </View>
                           </View>
-                          <Pressable style={styles.addPill} onPress={() => addGame(game.id)}>
+                          <Pressable
+                            style={styles.addPill}
+                            onPress={async () => {
+                              const { limitReached } = await addGame(game.id);
+                              if (limitReached) navigation.navigate('Paywall', { pendingGameId: game.id });
+                            }}
+                          >
                             <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
                             <View style={[StyleSheet.absoluteFill, styles.togglePillTint]} />
                             <Image source={ADD_CIRCLE_ICON} style={styles.addIcon} contentFit="contain" />
@@ -860,8 +903,6 @@ export function LibraryScreen({ navigation, route }: Props) {
                 </ScrollView>
               </View>
             )}
-
-            <Text style={styles.attribution}>Game data and cover art from IGDB.com</Text>
           </ScrollView>
         )}
       </SafeAreaView>
@@ -893,8 +934,33 @@ export function LibraryScreen({ navigation, route }: Props) {
           setSidebarVisible(false);
           navigation.navigate('Passport');
         }}
+        onOpenEvents={() => {
+          setSidebarVisible(false);
+          navigation.navigate('Events');
+        }}
         displayName={myDisplayName}
         avatarColor={myAvatarColor}
+      />
+
+      <GamePreviewModal
+        game={previewGame}
+        visible={!!previewGame}
+        isOwned={previewGame ? libraryIds.has(previewGame.id) : false}
+        status={previewGame ? entries.find((entry) => entry.catalogId === previewGame.id)?.status : undefined}
+        onClose={() => setPreviewGame(null)}
+        onViewDetails={() => {
+          if (!previewGame) return;
+          const catalogId = previewGame.id;
+          setPreviewGame(null);
+          navigation.navigate('GameDetail', { catalogId });
+        }}
+        onAdd={async () => {
+          if (!previewGame) return;
+          const catalogId = previewGame.id;
+          setPreviewGame(null);
+          const { limitReached } = await addGame(catalogId);
+          if (limitReached) navigation.navigate('Paywall', { pendingGameId: catalogId });
+        }}
       />
     </View>
   );
@@ -1023,6 +1089,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: NAV_CLEARANCE,
     gap: spacing.md,
+  },
+  loadMoreSpinner: {
+    paddingVertical: spacing.lg,
   },
   gridRow: {
     gap: spacing.md,
@@ -1269,12 +1338,6 @@ const styles = StyleSheet.create({
     width: 70,
     height: 30,
     borderRadius: radii.pill,
-  },
-  attribution: {
-    color: discoverColors.mutedText,
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: spacing.xs,
   },
   popularCard: {
     backgroundColor: discoverColors.cardBg,

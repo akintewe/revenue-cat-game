@@ -24,10 +24,12 @@ import { useOnboardingStore } from '../store/useOnboardingStore';
 import {
   updateMyProfile,
   searchUsers,
+  fetchSuggestedUsers,
   followUser,
   unfollowUser,
   ProfileUpdateError,
   type ProfileSummary,
+  type SuggestedUser,
 } from '../../../services/social/profiles';
 import { searchAllCatalog, fetchPopularSuggestions, resolveRemoteId } from '../../../services/catalog/unifiedCatalog';
 import type { SearchDevice } from '../../../services/catalog/remoteCatalog';
@@ -139,7 +141,7 @@ export function OnboardingScreen({ navigation }: Props) {
     });
   }
 
-  // Step 4 — platforms (no backend field yet; kept local, flagged to Tunde separately)
+  // Step 4 — platforms, written to profiles.platforms on continue
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<SearchDevice>>(new Set());
 
   function togglePlatform(value: SearchDevice) {
@@ -156,9 +158,22 @@ export function OnboardingScreen({ navigation }: Props) {
   const [friendQuery, setFriendQuery] = useState('');
   const [friendResults, setFriendResults] = useState<ProfileSummary[]>([]);
   const [friendSearching, setFriendSearching] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
   const [followedCount, setFollowedCount] = useState(0);
   const [followBusyId, setFollowBusyId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<ProfileSummary | null>(null);
+  const [expanded, setExpanded] = useState<ProfileSummary | SuggestedUser | null>(null);
+
+  // Fetched once the user reaches step 5 — ranking reflects the games/platforms they just picked.
+  useEffect(() => {
+    if (step !== 4 || suggestedUsers.length > 0) return;
+    setSuggestedLoading(true);
+    fetchSuggestedUsers(20)
+      .then(setSuggestedUsers)
+      .catch(() => setSuggestedUsers([]))
+      .finally(() => setSuggestedLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   useEffect(() => {
     const trimmed = friendQuery.trim();
@@ -191,18 +206,19 @@ export function OnboardingScreen({ navigation }: Props) {
     if (!userId || followBusyId) return;
     setFollowBusyId(person.user_id);
     const wasFollowing = person.followed_by_me;
-    setFriendResults((prev) =>
-      prev.map((p) => (p.user_id === person.user_id ? { ...p, followed_by_me: !wasFollowing } : p)),
-    );
+    const applyFollowState = (following: boolean) => {
+      setFriendResults((prev) => prev.map((p) => (p.user_id === person.user_id ? { ...p, followed_by_me: following } : p)));
+      setSuggestedUsers((prev) => prev.map((p) => (p.user_id === person.user_id ? { ...p, followed_by_me: following } : p)));
+      setExpanded((prev) => (prev && prev.user_id === person.user_id ? { ...prev, followed_by_me: following } : prev));
+    };
+    applyFollowState(!wasFollowing);
     setFollowedCount((c) => c + (wasFollowing ? -1 : 1));
     try {
       if (wasFollowing) await unfollowUser(userId, person.user_id);
       else await followUser(userId, person.user_id);
       hapticSuccess();
     } catch {
-      setFriendResults((prev) =>
-        prev.map((p) => (p.user_id === person.user_id ? { ...p, followed_by_me: wasFollowing } : p)),
-      );
+      applyFollowState(wasFollowing);
       setFollowedCount((c) => c + (wasFollowing ? 1 : -1));
     } finally {
       setFollowBusyId(null);
@@ -250,6 +266,11 @@ export function OnboardingScreen({ navigation }: Props) {
       return;
     }
     if (step === 3) {
+      if (userId && selectedPlatforms.size > 0) {
+        updateMyProfile(userId, { platforms: Array.from(selectedPlatforms) }).catch((err) =>
+          console.warn('[onboarding] platforms update failed', err),
+        );
+      }
       setStep(4);
       return;
     }
@@ -328,8 +349,8 @@ export function OnboardingScreen({ navigation }: Props) {
             <FriendsStep
               query={friendQuery}
               onChangeQuery={setFriendQuery}
-              results={friendResults}
-              searching={friendSearching}
+              results={friendQuery.trim() ? friendResults : suggestedUsers}
+              searching={friendQuery.trim() ? friendSearching : suggestedLoading}
               busyId={followBusyId}
               onToggleFollow={toggleFollow}
               onExpand={setExpanded}
@@ -589,6 +610,42 @@ function PlatformsStep({
 
 // ---------- Step 5 ----------
 
+const DEVICE_ICON: Record<SearchDevice, React.ComponentProps<typeof Ionicons>['name']> = {
+  playstation: 'logo-playstation',
+  xbox: 'logo-xbox',
+  nintendo: 'game-controller-outline',
+  pc: 'desktop-outline',
+  mobile: 'phone-portrait-outline',
+};
+
+function isSuggested(person: ProfileSummary | SuggestedUser): person is SuggestedUser {
+  return 'library_count' in person;
+}
+
+function SuggestionMeta({ person }: { person: SuggestedUser }) {
+  const parts: string[] = [`${person.library_count} game${person.library_count === 1 ? '' : 's'}`];
+  if (person.hours_played != null) parts.push(`${Math.round(person.hours_played)} hrs`);
+  return (
+    <View style={styles.suggestionMetaRow}>
+      <Text style={styles.friendMeta} numberOfLines={1}>
+        {parts.join(' · ')}
+      </Text>
+      {person.platforms.length > 0 && (
+        <View style={styles.suggestionPlatforms}>
+          {person.platforms.map((p) => (
+            <Ionicons key={p} name={DEVICE_ICON[p]} size={11} color={discoverColors.mutedText} />
+          ))}
+        </View>
+      )}
+      {person.games_in_common > 0 && (
+        <View style={styles.commonPill}>
+          <Text style={styles.commonPillText}>{person.games_in_common} in common</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function FriendsStep({
   query,
   onChangeQuery,
@@ -602,12 +659,12 @@ function FriendsStep({
 }: {
   query: string;
   onChangeQuery: (v: string) => void;
-  results: ProfileSummary[];
+  results: (ProfileSummary | SuggestedUser)[];
   searching: boolean;
   busyId: string | null;
   onToggleFollow: (p: ProfileSummary) => void;
-  onExpand: (p: ProfileSummary) => void;
-  expanded: ProfileSummary | null;
+  onExpand: (p: ProfileSummary | SuggestedUser) => void;
+  expanded: ProfileSummary | SuggestedUser | null;
   onCloseExpanded: () => void;
 }) {
   return (
@@ -637,6 +694,7 @@ function FriendsStep({
           <View style={[styles.expandedAvatar, { backgroundColor: coverColors[expanded.avatar_color] ?? coverColors.slate }]} />
           <Text style={styles.expandedName}>{expanded.display_name}</Text>
           <Text style={styles.expandedHandle}>@{expanded.handle}</Text>
+          {isSuggested(expanded) && <SuggestionMeta person={expanded} />}
           {expanded.bio ? <Text style={styles.expandedBio}>{expanded.bio}</Text> : null}
           <Pressable
             style={[styles.followButton, expanded.followed_by_me && styles.followButtonActive]}
@@ -652,7 +710,11 @@ function FriendsStep({
         <ScrollView contentContainerStyle={styles.friendList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {results.length === 0 && !searching && (
             <Text style={styles.emptyText}>
-              {query.trim().length < 2 ? 'Search by handle or name to find people to follow.' : `No one found matching "${query.trim()}".`}
+              {query.trim().length === 0
+                ? 'No suggestions yet — search by handle or name to find people to follow.'
+                : query.trim().length < 2
+                  ? 'Search by handle or name to find people to follow.'
+                  : `No one found matching "${query.trim()}".`}
             </Text>
           )}
           {results.map((person) => (
@@ -665,6 +727,7 @@ function FriendsStep({
                 <Text style={styles.friendHandle} numberOfLines={1}>
                   @{person.handle}
                 </Text>
+                {isSuggested(person) && <SuggestionMeta person={person} />}
               </View>
               <Pressable
                 style={[styles.followButtonSmall, person.followed_by_me && styles.followButtonActive]}
@@ -936,6 +999,32 @@ const styles = StyleSheet.create({
   friendHandle: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  friendMeta: {
+    color: colors.textFaint,
+    fontSize: 12,
+  },
+  suggestionMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  suggestionPlatforms: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  commonPill: {
+    backgroundColor: colors.accentMuted,
+    borderRadius: radii.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  commonPillText: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
   },
   followButton: {
     backgroundColor: colors.accent,

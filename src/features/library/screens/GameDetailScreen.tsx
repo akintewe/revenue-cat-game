@@ -14,7 +14,9 @@ import { LabeledInput } from '../../../shared/components/LabeledInput';
 import { Shimmer } from '../../../shared/components/Shimmer';
 import { colors, coverColors, radii, spacing, typography } from '../../../shared/theme/theme';
 import { findCatalogGame, type CatalogGame } from '../../../data/catalog';
-import { resolveCatalogGame } from '../../../services/catalog/unifiedCatalog';
+import { fetchGameDetail } from '../../../services/catalog/unifiedCatalog';
+import { fetchGameArtworkFor } from '../../../services/catalog/gameArtwork';
+import { insertGameWatch, deleteGameWatch } from '../../../services/events/remoteGameWatches';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { useWishlistStore } from '../../wishlist/store/useWishlistStore';
 import { GAME_STATUSES, STATUS_LABEL } from '../types';
@@ -36,20 +38,46 @@ export function GameDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [game, setGame] = useState<CatalogGame | undefined>(() => findCatalogGame(catalogId));
   const [loading, setLoading] = useState(!game);
+  const [watching, setWatching] = useState(false);
+  const [heroArtworkUrl, setHeroArtworkUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (game) return;
     let cancelled = false;
     setLoading(true);
-    resolveCatalogGame(catalogId, { track: true }).then((resolved) => {
+    fetchGameDetail(catalogId, { track: true }).then((resolved) => {
       if (cancelled) return;
-      setGame(resolved);
+      setGame(resolved?.game);
+      setWatching(resolved?.watching ?? false);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [catalogId, game]);
+
+  // Same key art as the long-press quick-view card — falls back to the blurred cover (below) on empty/error.
+  useEffect(() => {
+    let cancelled = false;
+    fetchGameArtworkFor(catalogId)
+      .then((url) => {
+        if (!cancelled && url) setHeroArtworkUrl(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogId]);
+
+  function handleToggleWatch() {
+    const wasWatching = watching;
+    setWatching(!wasWatching);
+    const action = wasWatching ? deleteGameWatch(catalogId) : insertGameWatch(catalogId);
+    action.catch((err) => {
+      console.warn('[game-detail] toggle watch failed', err);
+      setWatching(wasWatching);
+    });
+  }
 
   const entry = useLibraryStore((state) => state.getEntry(catalogId));
   const addToLibrary = useLibraryStore((state) => state.addGame);
@@ -85,6 +113,8 @@ export function GameDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  const isUpcoming = Boolean(game.releaseDate && new Date(game.releaseDate) > new Date());
+
   function handleMarkBeaten() {
     if (!entry) {
       addToLibrary(catalogId);
@@ -108,12 +138,12 @@ export function GameDetailScreen({ route, navigation }: Props) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }}>
         <View style={[styles.hero, { backgroundColor: coverBackground }]}>
-          {game.coverImageUrl && (
+          {(heroArtworkUrl || game.coverImageUrl) && (
             <Image
-              source={{ uri: game.coverImageUrl }}
+              source={{ uri: heroArtworkUrl ?? game.coverImageUrl }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={22}
+              blurRadius={8}
             />
           )}
           <LinearGradient
@@ -172,14 +202,14 @@ export function GameDetailScreen({ route, navigation }: Props) {
                 {game.timeToBeatHours && (
                   <View style={styles.statChip}>
                     <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.statChipText}>{Math.round(game.timeToBeatHours)}h</Text>
+                    <Text style={styles.statChipText}>
+                      {Math.round(game.timeToBeatHours)}h{game.timeToBeatCount ? ` (${game.timeToBeatCount})` : ''}
+                    </Text>
                     <Text style={styles.statChipSub}>to beat</Text>
                   </View>
                 )}
               </View>
             )}
-
-            {game.coverImageUrl && <Text style={styles.attribution}>Game data and cover art from IGDB.com</Text>}
           </View>
 
           {entry ? (
@@ -239,14 +269,36 @@ export function GameDetailScreen({ route, navigation }: Props) {
               disabled={entry.status === 'beaten'}
               style={styles.spacerTop}
             />
+            {isUpcoming && (
+              <Button
+                label={watching ? 'Watching for release' : 'Watch for release'}
+                onPress={handleToggleWatch}
+                variant="secondary"
+                style={styles.spacerTop}
+              />
+            )}
           </>
         ) : (
           <View style={styles.section}>
-            <Button label="Add to library" onPress={() => addToLibrary(catalogId)} />
+            <Button
+              label="Add to library"
+              onPress={async () => {
+                const { limitReached } = await addToLibrary(catalogId);
+                if (limitReached) navigation.navigate('Paywall', { pendingGameId: catalogId });
+              }}
+            />
             {!isWishlisted && (
               <Button
                 label="Add to wishlist"
                 onPress={() => addToWishlist(catalogId)}
+                variant="secondary"
+                style={styles.spacerTop}
+              />
+            )}
+            {isUpcoming && (
+              <Button
+                label={watching ? 'Watching for release' : 'Watch for release'}
+                onPress={handleToggleWatch}
                 variant="secondary"
                 style={styles.spacerTop}
               />
@@ -400,11 +452,6 @@ const styles = StyleSheet.create({
     color: colors.textFaint,
     fontSize: 11,
     fontWeight: '600',
-  },
-  attribution: {
-    color: colors.textFaint,
-    fontSize: 10,
-    marginTop: spacing.xs,
   },
   section: {
     gap: spacing.sm,

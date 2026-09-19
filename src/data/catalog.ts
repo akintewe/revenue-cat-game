@@ -34,6 +34,12 @@ export type CatalogGame = {
   criticScore?: number;
   /** "Normal" completion estimate in hours. Only a small slice of remote games have this. */
   timeToBeatHours?: number;
+  /** How many playthroughs timeToBeatHours is averaged from — always show alongside the hours, never alone. */
+  timeToBeatCount?: number;
+  /** How precise the release date actually is — 'day' is a real announced date, the rest are placeholders. */
+  releasePrecision?: 'day' | 'month' | 'quarter' | 'year';
+  /** IGDB's raw, untruncated description. Collapse whitespace and clamp for display — never assumed pre-trimmed. */
+  summary?: string;
 };
 
 // A small offline catalog standing in for a real games database (IGDB/RAWG)

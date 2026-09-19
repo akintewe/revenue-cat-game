@@ -1,14 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../../shared/components/Screen';
 import { GameRow } from '../../../shared/components/GameRow';
+import { GamePreviewModal } from '../../../shared/components/GamePreviewModal';
 import { EmptyState } from '../../../shared/components/EmptyState';
 import { colors, spacing, typography } from '../../../shared/theme/theme';
 import { useResponsiveLayout } from '../../../shared/hooks/useResponsiveLayout';
 import { useResolvedGames } from '../../../shared/hooks/useResolvedGames';
 import { formatReleaseLabel } from '../../../shared/utils/formatDate';
 import { useWishlistStore } from '../store/useWishlistStore';
+import { useLibraryStore } from '../../library/store/useLibraryStore';
+import type { CatalogGame } from '../../../data/catalog';
 import type { TabScreenProps } from '../../../core/navigation/types';
 
 type Props = TabScreenProps<'WishlistTab'>;
@@ -17,6 +20,11 @@ export function WishlistScreen({ navigation }: Props) {
   const entries = useWishlistStore((state) => state.entries);
   const toggleReminder = useWishlistStore((state) => state.toggleReminder);
   const { columns } = useResponsiveLayout();
+  const [previewGame, setPreviewGame] = useState<CatalogGame | null>(null);
+
+  const libraryEntries = useLibraryStore((state) => state.entries);
+  const addGame = useLibraryStore((state) => state.addGame);
+  const libraryIds = useMemo(() => new Set(libraryEntries.map((entry) => entry.catalogId)), [libraryEntries]);
 
   const entryIds = useMemo(() => entries.map((entry) => entry.catalogId), [entries]);
   const { games } = useResolvedGames(entryIds);
@@ -64,6 +72,7 @@ export function WishlistScreen({ navigation }: Props) {
               onPress={() =>
                 navigation.navigate('GameDetail', { catalogId: item.entry.catalogId })
               }
+              onLongPress={() => setPreviewGame(item.game)}
               style={columns > 1 ? styles.gridItem : undefined}
             >
               <Pressable
@@ -81,6 +90,27 @@ export function WishlistScreen({ navigation }: Props) {
           )}
         />
       )}
+
+      <GamePreviewModal
+        game={previewGame}
+        visible={!!previewGame}
+        isOwned={previewGame ? libraryIds.has(previewGame.id) : false}
+        status={previewGame ? libraryEntries.find((entry) => entry.catalogId === previewGame.id)?.status : undefined}
+        onClose={() => setPreviewGame(null)}
+        onViewDetails={() => {
+          if (!previewGame) return;
+          const catalogId = previewGame.id;
+          setPreviewGame(null);
+          navigation.navigate('GameDetail', { catalogId });
+        }}
+        onAdd={async () => {
+          if (!previewGame) return;
+          const catalogId = previewGame.id;
+          setPreviewGame(null);
+          const { limitReached } = await addGame(catalogId);
+          if (limitReached) navigation.navigate('Paywall', { pendingGameId: catalogId });
+        }}
+      />
     </Screen>
   );
 }

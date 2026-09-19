@@ -23,7 +23,10 @@ async function syncReminder(catalogId: string, enabled: boolean) {
   }
   const game = await resolveCatalogGame(catalogId);
   const isUpcoming = Boolean(game?.releaseDate && new Date(game.releaseDate) > new Date());
-  if (game && isUpcoming) {
+  // IGDB encodes "sometime in 2027" as a real date (e.g. 31 Dec) — only a real
+  // day-precision date is safe to fire a "releases today" notification on.
+  const isDayPrecise = game?.releasePrecision === 'day';
+  if (game && isUpcoming && isDayPrecise) {
     scheduleReleaseReminder(catalogId, game.title, game.releaseDate!);
   }
 }

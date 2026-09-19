@@ -2,6 +2,25 @@ import { supabase } from '../supabase/client';
 import type { GameStatus, LibraryEntry } from '../../features/library/types';
 
 /**
+ * The server-enforced free-tier cap (or a locked-row edit) — see
+ * prysm-pro-for-sola.md §7.1. `reason` is the raw PostgREST `message`
+ * (`free_tier_limit_reached` | `entry_locked_free_tier`); `hint` is written to be
+ * shown to the user verbatim.
+ */
+export class LibraryLimitError extends Error {
+  constructor(public reason: string, public hint: string) {
+    super(hint);
+  }
+}
+
+function throwIfLimitError(error: { code?: string; message: string; hint?: string | null }): never {
+  if (error.code === 'PT402') {
+    throw new LibraryLimitError(error.message, error.hint ?? 'Prysm Pro removes this limit.');
+  }
+  throw error;
+}
+
+/**
  * Real, synced library — direct Postgres access to `library_entries` via PostgREST,
  * scoped by row-level security to the signed-in user. No edge function involved.
  * See the Shelf backend API reference, "The library" section.
@@ -51,7 +70,7 @@ export async function insertLibraryEntry(userId: string, gameId: string): Promis
     .insert({ user_id: userId, game_id: gameId, status: 'backlog', source_kind: 'search' })
     .select(LIBRARY_COLUMNS)
     .single();
-  if (error) throw error;
+  if (error) throwIfLimitError(error);
   return rowToEntry(data);
 }
 
@@ -82,5 +101,5 @@ export async function updateLibraryEntry(
     .update(patch)
     .eq('user_id', userId)
     .eq('game_id', gameId);
-  if (error) throw error;
+  if (error) throwIfLimitError(error);
 }

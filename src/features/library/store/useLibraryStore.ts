@@ -6,6 +6,7 @@ import {
   fetchLibraryEntries,
   insertLibraryEntry,
   updateLibraryEntry,
+  LibraryLimitError,
 } from '../../../services/library/remoteLibrary';
 
 export const FREE_TIER_GAME_LIMIT = 50;
@@ -24,7 +25,8 @@ type LibraryStore = {
   reset: () => void;
   isInLibrary: (catalogId: string) => boolean;
   getEntry: (catalogId: string) => LibraryEntry | undefined;
-  addGame: (catalogId: string) => Promise<void>;
+  /** Returns `{ limitReached: true }` when the server refused the write over the free-tier cap. */
+  addGame: (catalogId: string) => Promise<{ limitReached: boolean }>;
   removeGame: (catalogId: string) => Promise<void>;
   setStatus: (catalogId: string, status: GameStatus) => Promise<void>;
   setRating: (catalogId: string, rating: number) => Promise<void>;
@@ -57,7 +59,7 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
 
   addGame: async (catalogId) => {
     const userId = currentUserId();
-    if (!userId || get().isInLibrary(catalogId)) return;
+    if (!userId || get().isInLibrary(catalogId)) return { limitReached: false };
 
     const optimistic: LibraryEntry = {
       catalogId,
@@ -74,9 +76,14 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
 
     try {
       await insertLibraryEntry(userId, catalogId);
+      return { limitReached: false };
     } catch (err) {
-      console.warn('[library] addGame failed', err);
       set((state) => ({ entries: state.entries.filter((entry) => entry.catalogId !== catalogId) }));
+      if (err instanceof LibraryLimitError) {
+        return { limitReached: true };
+      }
+      console.warn('[library] addGame failed', err);
+      return { limitReached: false };
     }
   },
 

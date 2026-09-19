@@ -1,14 +1,15 @@
 import { supabase } from '../supabase/client';
 import type { CoverColorKey } from '../../data/catalog';
 
-export type NotificationKind = 'follow' | 'post_like' | 'post_comment';
+export type NotificationKind = 'follow' | 'post_like' | 'post_comment' | 'game_release';
 
 export type ShelfNotification = {
   id: string;
   kind: NotificationKind;
   created_at: string;
   read_at: string | null;
-  actor_id: string;
+  /** Null for a system-generated row, e.g. game_release — there's no acting user. */
+  actor_id: string | null;
   handle: string;
   display_name: string;
   avatar_color: CoverColorKey;
@@ -16,6 +17,10 @@ export type ShelfNotification = {
   post_excerpt: string | null;
   comment_id: string | null;
   comment_excerpt: string | null;
+  /** game_release only. */
+  game_id?: string | null;
+  game_title?: string | null;
+  game_cover?: string | null;
 };
 
 export async function fetchNotifications(params?: {
